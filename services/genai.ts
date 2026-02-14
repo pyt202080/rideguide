@@ -5,8 +5,6 @@ import { MOCK_ROUTES } from "../constants";
 export const generateRoutes = async (start: string, destination: string, startCoords?: {lat: number, lng: number}, destCoords?: {lat: number, lng: number}): Promise<RouteOption[]> => {
   const hasKey = !!process.env.API_KEY;
 
-  // API 키가 없으면 어쩔 수 없이 MOCK 데이터를 반환하지만, 
-  // API 키가 있다면 반드시 사용자 입력(start, destination)을 기반으로 생성합니다.
   if (!hasKey || !start || !destination) {
     return new Promise(resolve => setTimeout(() => resolve(MOCK_ROUTES), 800));
   }
@@ -15,20 +13,22 @@ export const generateRoutes = async (start: string, destination: string, startCo
 
   try {
     const locationContext = `Plan driving routes from "${start}" to "${destination}" in South Korea. 
-    Coordinates Context: Start(${startCoords?.lat}, ${startCoords?.lng}) to Destination(${destCoords?.lat}, ${destCoords?.lng}).`;
+    Start Coords: (${startCoords?.lat}, ${startCoords?.lng}), Dest Coords: (${destCoords?.lat}, ${destCoords?.lng})`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `${locationContext}
       
-      [CRITICAL DIRECTIVE: ACTUAL ROUTE GENERATION]
-      1. **NO DEFAULTS:** Do not default to Busan unless the user searched for Busan. Generate a path specifically for "${start}" to "${destination}".
-      2. **EXHAUSTIVE LIST:** Identify EVERY single official expressway rest area (휴게소) on this specific path. If there are 15-30 rest areas, list them all.
-      3. **SEQUENCE:** Arrange stops in strict driving order from start to destination.
-      4. **PATH ACCURACY:** Provide a realistic 'path' array of coordinates that connects "${start}" to "${destination}".
-      5. **IC DINING:** If there are long stretches without rest areas, include famous local restaurants within 2km of major IC exits.
-      6. **KOREAN ONLY:** All 'name', 'topItems', 'description', and 'summary' MUST be in Korean.
-      7. **STOPS DATA:** For each stop: Give 2-3 signature dishes (topItems), a concise description, and a 4.0-5.0 rating.
+      [CRITICAL DIRECTIVE: ABSOLUTE EXHAUSTIVE DATA RETRIEVAL - DO NOT SUMMARIZE]
+      
+      1. **YOUR ROLE:** You are a RAW DATA EXTRACTOR for South Korean Expressway infrastructure. 
+      2. **ZERO-OMISSION POLICY:** Your primary mission is to identify and list EVERY SINGLE official expressway rest area (휴게소) that physically exists on the route. 
+      3. **SUMMARIZATION IS FORBIDDEN:** Do not filter by popularity. Do not pick "top results". If the road has 25 rest areas, you MUST provide data for all 25. Omitting even one rest area to be "concise" is a failure of this task.
+      4. **FULL INVENTORY:** Include all official 'Rest Areas' (휴게소) and 'Sleepy-driver Shelters' (졸음쉼터) that have food stalls or convenience stores.
+      5. **STRICT SEQUENTIALITY:** List them in the exact order they appear along the driving direction.
+      6. **IC GEMS:** Additionally, include 3-5 famous restaurants located within 2km of major Interchange (IC) exits along the path.
+      7. **KOREAN DATA ONLY:** Ensure all 'name', 'topItems', 'description', and 'summary' fields are in Korean.
+      8. **STOPS DATA FORMAT:** For each entry: 2-3 signature dishes (topItems), a factual 1-sentence description, and a realistic rating (4.0-5.0).
       `,
       config: {
         responseMimeType: "application/json",
@@ -82,13 +82,12 @@ export const generateRoutes = async (start: string, destination: string, startCo
       }
     });
 
-    const text = response.text;
-    const routes = JSON.parse(text || '[]') as any[];
+    const routes = JSON.parse(response.text || '[]') as any[];
     
     return routes.map((route, i) => ({
       ...route,
       routeId: `gen_route_${i}_${Date.now()}`,
-      stops: route.stops.map((stop: any, j: number) => ({
+      stops: (route.stops || []).map((stop: any, j: number) => ({
         ...stop,
         stopId: `gen_stop_${i}_${j}`,
         imageUrl: `https://picsum.photos/400/300?random=${Math.floor(Math.random() * 1000) + j}`,
