@@ -1,4 +1,3 @@
-
 import { RouteOption, StopType } from './types';
 
 // Major Korean Cities with Coordinates for Map Pinning
@@ -13,7 +12,6 @@ export const CITIES_DATA: { name: string; lat: number; lng: number }[] = [
   { name: "세종", lat: 36.4800, lng: 127.2890 },
   { name: "수원", lat: 37.2636, lng: 127.0286 },
   { name: "성남", lat: 37.4200, lng: 127.1265 },
-  { name: "의정부", lat: 37.7381, lng: 127.0337 },
   { name: "청주", lat: 36.6356, lng: 127.4913 },
   { name: "춘천", lat: 37.8813, lng: 127.7298 },
   { name: "강릉", lat: 37.7519, lng: 128.8760 },
@@ -37,130 +35,156 @@ export const CITIES_DATA: { name: string; lat: number; lng: number }[] = [
   { name: "거제", lat: 34.8806, lng: 128.6211 }
 ];
 
-// Fallback list for autocomplete (including names without specific coords in the simplified list above)
 export const KOREAN_CITIES = CITIES_DATA.map(c => c.name);
 
-// Coordinates for mock path (Simplified Seoul -> Busan)
 const PATH_A_COORDS = [
-  { lat: 37.5665, lng: 126.9780 }, // Seoul
-  { lat: 37.3948, lng: 127.1111 },
-  { lat: 36.6356, lng: 127.4913 }, // Cheongju
-  { lat: 36.3504, lng: 127.3845 }, // Daejeon
-  { lat: 35.8714, lng: 128.6014 }, // Daegu
-  { lat: 35.1796, lng: 129.0756 }, // Busan
-];
-
-const PATH_B_COORDS = [
-  { lat: 37.5665, lng: 126.9780 }, // Seoul
-  { lat: 37.2636, lng: 127.0286 }, // Suwon
-  { lat: 36.8065, lng: 127.1522 }, // Cheonan
-  { lat: 35.8242, lng: 127.1480 }, // Jeonju (Detour)
-  { lat: 35.1595, lng: 126.8526 }, // Gwangju
-  { lat: 35.1796, lng: 129.0756 }, // Busan
+  { lat: 37.4563, lng: 126.7052 }, // Incheon
+  { lat: 37.3513, lng: 126.9502 },
+  { lat: 37.1523, lng: 127.2000 },
+  { lat: 36.8000, lng: 127.5000 },
+  { lat: 36.5684, lng: 128.7294 }, // Andong
 ];
 
 export const MOCK_ROUTES: RouteOption[] = [
   {
-    routeId: 'route_1',
-    summary: '경부고속도로',
-    distanceKm: 390,
-    durationMin: 270, // 4h 30m
+    routeId: 'route_full_exhaustive',
+    summary: '중부내륙 고속도로 (최적 경로)',
+    distanceKm: 242,
+    durationMin: 185,
     toll: true,
     path: PATH_A_COORDS,
     stops: [
       {
-        stopId: 's1',
+        stopId: 'm1',
         type: StopType.HIGHWAY_REST_AREA,
-        name: '안성휴게소',
-        location: { lat: 37.067, lng: 127.243 },
-        topItems: ['소떡소떡', '안성국밥'],
-        description: '국민 간식 소떡소떡의 성지이자 진한 국밥이 일품인 곳.',
-        imageUrl: 'https://picsum.photos/400/300?random=1',
-        rating: 4.5,
-        // Fixed: added kakao search link
-        searchLinks: { naver: '#', google: '#', kakao: '#' }
-      },
-      {
-        stopId: 's2',
-        type: StopType.HIGHWAY_REST_AREA,
-        name: '금강휴게소',
-        location: { lat: 36.278, lng: 127.671 },
-        topItems: ['도리뱅뱅이', '우동'],
-        description: '금강이 내려다보이는 환상적인 뷰와 도리뱅뱅이가 유명한 휴게소.',
-        imageUrl: 'https://picsum.photos/400/300?random=2',
-        rating: 4.8,
-        // Fixed: added kakao search link
-        searchLinks: { naver: '#', google: '#', kakao: '#' }
-      },
-      {
-        stopId: 's3',
-        type: StopType.LOCAL_RESTAURANT,
-        name: '대전 얼큰이 칼국수',
-        location: { lat: 36.3504, lng: 127.3845 },
-        topItems: ['얼큰이 칼국수', '쭈꾸미 볶음'],
-        description: '대전 IC에서 5분 거리, 현지인들이 줄 서서 먹는 매운 칼국수.',
-        imageUrl: 'https://picsum.photos/400/300?random=3',
-        rating: 4.7,
-        // Fixed: added kakao search link
-        searchLinks: { naver: '#', google: '#', kakao: '#' }
-      },
-      {
-        stopId: 's4',
-        type: StopType.HIGHWAY_REST_AREA,
-        name: '칠곡휴게소',
-        location: { lat: 35.945, lng: 128.523 },
-        topItems: ['자율식당', '옛날 돈가스'],
-        description: '원하는 반찬을 골라 먹는 재미가 있는 자율식당.',
-        imageUrl: 'https://picsum.photos/400/300?random=4',
-        rating: 4.2,
-        // Fixed: added kakao search link
-        searchLinks: { naver: '#', google: '#', kakao: '#' }
-      }
-    ]
-  },
-  {
-    routeId: 'route_2',
-    summary: '중부내륙고속도로',
-    distanceKm: 405,
-    durationMin: 290, // 4h 50m
-    toll: true,
-    path: PATH_B_COORDS,
-    stops: [
-      {
-        stopId: 's5',
-        type: StopType.HIGHWAY_REST_AREA,
-        name: '마장 프리미엄 휴게소',
-        location: { lat: 37.234, lng: 127.354 },
-        topItems: ['이천 쌀밥 정식', '스타벅스'],
-        description: '쇼핑몰과 다양한 먹거리가 있는 국내 최대 규모의 휴게소.',
-        imageUrl: 'https://picsum.photos/400/300?random=5',
+        name: '시흥하늘휴게소',
+        location: { lat: 37.387, lng: 126.864 },
+        topItems: ['소고기 국밥', '전복 김밥'],
+        description: '국내 최초 브릿지형 휴게소로 다양한 전문 식당가가 입점해 있습니다.',
+        imageUrl: 'https://picsum.photos/400/300?random=11',
         rating: 4.6,
-        // Fixed: added kakao search link
-        searchLinks: { naver: '#', google: '#', kakao: '#' }
+        searchLinks: { naver: 'https://map.naver.com/v5/search/시흥하늘휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/시흥하늘휴게소' }
       },
       {
-        stopId: 's6',
-        type: StopType.LOCAL_RESTAURANT,
-        name: '천안 원조 호두과자',
-        location: { lat: 36.8065, lng: 127.1522 },
-        topItems: ['호두과자'],
-        description: '천안 IC 바로 앞, 갓 구워낸 따끈따끈한 원조 호두과자.',
-        imageUrl: 'https://picsum.photos/400/300?random=6',
+        stopId: 'm2',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '의왕청계휴게소',
+        location: { lat: 37.391, lng: 127.024 },
+        topItems: ['옛날 핫도그', '순두부찌개'],
+        description: '수도권 순환 도로의 알짜배기 휴게소.',
+        imageUrl: 'https://picsum.photos/400/300?random=12',
+        rating: 4.1,
+        searchLinks: { naver: 'https://map.naver.com/v5/search/의왕청계휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/의왕청계휴게소' }
+      },
+      {
+        stopId: 'm3',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '용인휴게소',
+        location: { lat: 37.240, lng: 127.228 },
+        topItems: ['맥적구이 비빔밥', '우동'],
+        description: '용인의 명물 맥적구이를 맛볼 수 있는 깔끔한 휴게소.',
+        imageUrl: 'https://picsum.photos/400/300?random=13',
+        rating: 4.3,
+        searchLinks: { naver: 'https://map.naver.com/v5/search/용인휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/용인휴게소' }
+      },
+      {
+        stopId: 'm4',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '덕평자연휴게소',
+        location: { lat: 37.210, lng: 127.388 },
+        topItems: ['덕평 소고기국밥', '비어드파파'],
+        description: '전국 판매 1위 국밥과 산책로가 있는 최고의 테마 휴게소.',
+        imageUrl: 'https://picsum.photos/400/300?random=14',
         rating: 4.9,
-        // Fixed: added kakao search link
-        searchLinks: { naver: '#', google: '#', kakao: '#' }
+        searchLinks: { naver: 'https://map.naver.com/v5/search/덕평자연휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/덕평자연휴게소' }
       },
       {
-        stopId: 's7',
-        type: StopType.LOCAL_RESTAURANT,
-        name: '전주 비빔밥 고궁',
-        location: { lat: 35.8242, lng: 127.1480 },
-        topItems: ['전주비빔밥', '콩나물국밥'],
-        description: '전주 IC 인근에서 맛보는 정통 전주비빔밥의 맛.',
-        imageUrl: 'https://picsum.photos/400/300?random=7',
+        stopId: 'm5',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '여주휴게소',
+        location: { lat: 37.243, lng: 127.568 },
+        topItems: ['여주 쌀밥 정식', '수제 돈가스'],
+        description: '도자기와 쌀로 유명한 여주의 맛을 담은 대형 휴게소.',
+        imageUrl: 'https://picsum.photos/400/300?random=15',
+        rating: 4.5,
+        searchLinks: { naver: 'https://map.naver.com/v5/search/여주휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/여주휴게소' }
+      },
+      {
+        stopId: 'm6',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '서여주휴게소',
+        location: { lat: 37.258, lng: 127.618 },
+        topItems: ['영양 돌솥밥', '돈가스'],
+        description: '비교적 한산하지만 밥맛이 훌륭한 곳.',
+        imageUrl: 'https://picsum.photos/400/300?random=16',
+        rating: 4.2,
+        searchLinks: { naver: 'https://map.naver.com/v5/search/서여주휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/서여주휴게소' }
+      },
+      {
+        stopId: 'm7',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '충주휴게소',
+        location: { lat: 37.050, lng: 127.810 },
+        topItems: ['사과 돈가스', '얼큰한 국밥'],
+        description: '충주 사과를 활용한 다양한 메뉴와 간식이 일품입니다.',
+        imageUrl: 'https://picsum.photos/400/300?random=17',
+        rating: 4.4,
+        searchLinks: { naver: 'https://map.naver.com/v5/search/충주휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/충주휴게소' }
+      },
+      {
+        stopId: 'm8',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '괴산휴게소',
+        location: { lat: 36.800, lng: 127.940 },
+        topItems: ['올갱이 국밥', '고추 정식'],
+        description: '괴산 특산물인 올갱이로 끓인 시원한 국밥이 유명.',
+        imageUrl: 'https://picsum.photos/400/300?random=18',
+        rating: 4.3,
+        searchLinks: { naver: 'https://map.naver.com/v5/search/괴산휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/괴산휴게소' }
+      },
+      {
+        stopId: 'm9',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '문경휴게소',
+        location: { lat: 36.640, lng: 128.140 },
+        topItems: ['문경약돌돼지 제육', '오미자 돈가스'],
+        description: '문경의 특색을 살린 건강한 먹거리가 가득합니다.',
+        imageUrl: 'https://picsum.photos/400/300?random=19',
+        rating: 4.7,
+        searchLinks: { naver: 'https://map.naver.com/v5/search/문경휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/문경휴게소' }
+      },
+      {
+        stopId: 'm10',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '상주휴게소',
+        location: { lat: 36.350, lng: 128.180 },
+        topItems: ['한우 가마솥 국밥', '상주 곶감 빵'],
+        description: '깊은 맛의 국밥과 달콤한 곶감 디저트가 조화롭습니다.',
+        imageUrl: 'https://picsum.photos/400/300?random=20',
+        rating: 4.5,
+        searchLinks: { naver: 'https://map.naver.com/v5/search/상주휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/상주휴게소' }
+      },
+      {
+        stopId: 'm11',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '의성휴게소',
+        location: { lat: 36.420, lng: 128.520 },
+        topItems: ['의성마늘 돈가스', '마늘 라면'],
+        description: '알싸하고 풍미 깊은 마늘 요리의 끝판왕.',
+        imageUrl: 'https://picsum.photos/400/300?random=21',
+        rating: 4.2,
+        searchLinks: { naver: 'https://map.naver.com/v5/search/의성휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/의성휴게소' }
+      },
+      {
+        stopId: 'm12',
+        type: StopType.HIGHWAY_REST_AREA,
+        name: '안동휴게소',
+        location: { lat: 36.568, lng: 128.620 },
+        topItems: ['안동 간고등어 정식', '소고기 국밥'],
+        description: '목적지 직전, 안동의 명물 간고등어를 맛볼 수 있는 곳.',
+        imageUrl: 'https://picsum.photos/400/300?random=22',
         rating: 4.8,
-        // Fixed: added kakao search link
-        searchLinks: { naver: '#', google: '#', kakao: '#' }
+        searchLinks: { naver: 'https://map.naver.com/v5/search/안동휴게소', google: '#', kakao: 'https://map.kakao.com/link/search/안동휴게소' }
       }
     ]
   }

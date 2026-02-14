@@ -13,22 +13,21 @@ export const generateRoutes = async (start: string, destination: string, startCo
 
   try {
     const locationContext = `Plan driving routes from "${start}" to "${destination}" in South Korea. 
-    Start Coords: (${startCoords?.lat}, ${startCoords?.lng}), Dest Coords: (${destCoords?.lat}, ${destCoords?.lng})`;
+    Start: (${startCoords?.lat}, ${startCoords?.lng}), Dest: (${destCoords?.lat}, ${destCoords?.lng})`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `${locationContext}
       
-      [CRITICAL DIRECTIVE: ABSOLUTE EXHAUSTIVE DATA RETRIEVAL - DO NOT SUMMARIZE]
-      
-      1. **YOUR ROLE:** You are a RAW DATA EXTRACTOR for South Korean Expressway infrastructure. 
-      2. **ZERO-OMISSION POLICY:** Your primary mission is to identify and list EVERY SINGLE official expressway rest area (휴게소) that physically exists on the route. 
-      3. **SUMMARIZATION IS FORBIDDEN:** Do not filter by popularity. Do not pick "top results". If the road has 25 rest areas, you MUST provide data for all 25. Omitting even one rest area to be "concise" is a failure of this task.
-      4. **FULL INVENTORY:** Include all official 'Rest Areas' (휴게소) and 'Sleepy-driver Shelters' (졸음쉼터) that have food stalls or convenience stores.
-      5. **STRICT SEQUENTIALITY:** List them in the exact order they appear along the driving direction.
-      6. **IC GEMS:** Additionally, include 3-5 famous restaurants located within 2km of major Interchange (IC) exits along the path.
-      7. **KOREAN DATA ONLY:** Ensure all 'name', 'topItems', 'description', and 'summary' fields are in Korean.
-      8. **STOPS DATA FORMAT:** For each entry: 2-3 signature dishes (topItems), a factual 1-sentence description, and a realistic rating (4.0-5.0).
+      [CRITICAL: RAW INFRASTRUCTURE DATABASE MODE]
+      1. **OBJECTIVE:** Provide a 100% complete, non-summarized inventory of all highway service areas.
+      2. **STRICT ZERO-SUMMARY POLICY:** Do not "recommend" or "curate". You are forbidden from choosing only popular stops. 
+      3. **ENUMERATE EVERYTHING:** If there are 15 service areas along the route, you MUST return all 15. Omitting a single official rest area (휴게소) is a violation of this instruction. 
+      4. **PATH:** Use main South Korean Expressways (Gyeongbu, Jungbu-Naeryuk, Yeongdong, etc.) that connect the points.
+      5. **DATA DEPTH:** Include small-scale rest areas and 간이휴게소 as well.
+      6. **IC DINING:** Add 2-3 extra local famous restaurants near major IC exits.
+      7. **LANGUAGE:** Korean for 'name', 'topItems', 'description', 'summary'.
+      8. **ORDER:** Perfect chronological order as encountered while driving.
       `,
       config: {
         responseMimeType: "application/json",
