@@ -51,7 +51,6 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
           const map = new window.kakao.maps.Map(mapContainer.current, options);
           mapInstance.current = map;
           
-          // Add click listener if onMapClick is provided
           window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
             if (onMapClick) {
               const latlng = mouseEvent.latLng;
@@ -72,7 +71,7 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
     
     if (typeof window.kakao !== 'undefined' && window.kakao.maps) {
       initMap();
-    } else if (retryCount < 30) {
+    } else if (retryCount < 20) {
       const timer = setTimeout(() => setRetryCount(prev => prev + 1), 500);
       return () => clearTimeout(timer);
     } else {
@@ -80,13 +79,11 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
     }
   }, [retryCount, onMapClick]);
 
-  // Kakao Map Drawing Logic
   useEffect(() => {
     if (!isApiLoaded || !mapInstance.current) return;
     const map = mapInstance.current;
     const kakao = window.kakao;
 
-    // Clear existing elements
     markers.current.forEach(m => m.setMap(null));
     overlays.current.forEach(o => o.setMap(null));
     if (polyline.current) polyline.current.setMap(null);
@@ -126,15 +123,13 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
 
     if (startPoint) {
         const pos = new kakao.maps.LatLng(startPoint.lat, startPoint.lng);
-        const marker = new kakao.maps.Marker({ position: pos, map: map });
-        markers.current.push(marker);
+        new kakao.maps.Marker({ position: pos, map: map });
         bounds.extend(pos);
         hasPoints = true;
     }
     if (endPoint) {
         const pos = new kakao.maps.LatLng(endPoint.lat, endPoint.lng);
-        const marker = new kakao.maps.Marker({ position: pos, map: map });
-        markers.current.push(marker);
+        new kakao.maps.Marker({ position: pos, map: map });
         bounds.extend(pos);
         hasPoints = true;
     }
@@ -176,8 +171,8 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
             <h3 className="text-xl font-black text-neutral-900 mb-3 tracking-tight">지도 API 연결 안내</h3>
             <p className="text-neutral-500 text-sm mb-6 leading-relaxed break-keep font-medium">
                 카카오 개발자 콘솔의 <strong>[플랫폼 > Web]</strong> 메뉴에서<br/>
-                <span className="text-primary font-bold">https://rideguide.vercel.app</span>를<br/>
-                '사이트 도메인'에 등록했는지 확인해 주세요.
+                <span className="text-primary font-bold">https://rideguide.vercel.app</span> 를<br/>
+                '사이트 도메인'에 정확히 등록했는지 확인해 주세요.
             </p>
             {demoPathData && (
                 <div className="bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
