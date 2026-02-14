@@ -23,15 +23,13 @@ export const generateRoutes = async (start: string, destination: string, startCo
       contents: `${locationContext}
       
       CRITICAL INSTRUCTION (KOREAN):
-      1. **전수 조사(Exhaustive List) 수행:** 해당 경로상에 존재하는 **모든 정식 고속도로 휴게소와 간이 휴게소**를 단 하나도 빠짐없이 주행 순서대로 나열하세요. 
-      2. **생략 금지:** AI는 장거리 노선(예: 인천-안동)에서 흔히 5~6개만 보여주고 요약하려 하지만, 이는 잘못된 응답입니다. 200km 이상의 경로는 보통 12~20개의 휴게소가 존재합니다. **절대로 요약하지 말고 모든 목록을 다 출력하세요.**
-      3. **노선별 체크:** 영동고속도로, 중부내륙고속도로 등 각 고속도로 구간에 속한 모든 휴게소(예: 시흥하늘, 의왕청계, 용인, 덕평, 여주, 문막, 충주, 괴산, 문경, 선산, 상주, 의성 등)를 실제 지도 기반으로 전수 추출하세요.
-      4. 여러 경로가 특정 고속도로 구간을 공유한다면, 해당 구간의 휴게소 목록은 모든 경로 리스트에 동일하게 중복 포함되어야 합니다.
-      5. 각 휴게소별로 가장 유명한 메뉴 2개와 특징을 'break-keep' 스타일(단어 중심)로 상세히 작성하세요.
+      1. **전수 조사(Exhaustive List) 수행:** 해당 경로상에 존재하는 **모든 정식 고속도로 휴게소**를 주행 순서대로 나열하세요.
+      2. **IC 인근 맛집 포함:** 고속도로 휴게소뿐만 아니라, 주요 IC(나들목)에서 5~10분 내로 접근 가능한 **유명 지역 맛집(local_restaurant)**도 경로 중간중간에 포함시키세요.
+      3. **생략 금지:** 장거리 노선에서 리스트를 요약하지 마세요. 200km 이상의 경로는 휴게소와 IC 맛집을 합쳐 보통 15~25개의 지점이 존재해야 합니다.
+      4. **상세 정보:** 각 지점별로 가장 유명한 메뉴 2개와 특징을 'break-keep' 스타일로 작성하세요.
       `,
       config: {
         responseMimeType: "application/json",
-        // thinkingBudget을 설정하지 않거나 조절하여 모델이 데이터를 더 잘 회상하도록 유도
         responseSchema: {
           type: Type.ARRAY,
           items: {
@@ -58,7 +56,7 @@ export const generateRoutes = async (start: string, destination: string, startCo
                   type: Type.OBJECT,
                   properties: {
                     stopId: { type: Type.STRING },
-                    type: { type: Type.STRING, enum: [StopType.HIGHWAY_REST_AREA] },
+                    type: { type: Type.STRING, enum: [StopType.HIGHWAY_REST_AREA, StopType.LOCAL_RESTAURANT] },
                     name: { type: Type.STRING },
                     location: {
                       type: Type.OBJECT,

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { RouteOption, Stop, Coordinates } from '../types';
-import { Map as MapIcon, Navigation, Info } from 'lucide-react';
+import { Map as MapIcon, Navigation, Info, AlertCircle } from 'lucide-react';
 
 interface MapVisualizationProps {
   route?: RouteOption;
@@ -36,83 +36,56 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
   const [useDemoMode, setUseDemoMode] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  const initMap = () => {
-    if (!mapContainer.current || !window.kakao || !window.kakao.maps) return;
-
-    window.kakao.maps.load(() => {
-      try {
-        const options = {
-          center: new window.kakao.maps.LatLng(36.5, 127.5),
-          level: 10
-        };
-        const map = new window.kakao.maps.Map(mapContainer.current, options);
-        mapInstance.current = map;
-        setIsApiLoaded(true);
-        setUseDemoMode(false);
-      } catch (err) {
-        setUseDemoMode(true);
-      }
-    });
-  };
-
   useEffect(() => {
+    const initMap = () => {
+      if (!mapContainer.current || !window.kakao || !window.kakao.maps) {
+        console.warn("Kakao maps SDK not found during init attempt");
+        return;
+      }
+
+      window.kakao.maps.load(() => {
+        try {
+          console.log("Kakao Map API successfully loaded");
+          const options = {
+            center: new window.kakao.maps.LatLng(36.5, 127.5),
+            level: 12
+          };
+          const map = new window.kakao.maps.Map(mapContainer.current, options);
+          mapInstance.current = map;
+          setIsApiLoaded(true);
+          setUseDemoMode(false);
+        } catch (err) {
+          console.error("Map initialization failed:", err);
+          setUseDemoMode(true);
+        }
+      });
+    };
+
     if (mapInstance.current) return;
+    
     if (typeof window.kakao !== 'undefined' && window.kakao.maps) {
       initMap();
+    } else if (retryCount < 20) {
+      const timer = setTimeout(() => setRetryCount(prev => prev + 1), 500);
+      return () => clearTimeout(timer);
     } else {
-      if (retryCount < 5) { // Quicker fallback for better dev experience
-        const timer = setTimeout(() => setRetryCount(prev => prev + 1), 300);
-        return () => clearTimeout(timer);
-      } else {
-        setUseDemoMode(true);
-      }
+      console.error("Kakao Maps API failed to load after 20 retries.");
+      setUseDemoMode(true);
     }
   }, [retryCount]);
 
-  // SVG Path Generator for Demo Mode
-  const demoPathData = useMemo(() => {
-    if (!useDemoMode || !route?.path?.length) return null;
-    
-    // Normalize coordinates to 0-100 range for SVG
-    const lats = route.path.map(p => p.lat);
-    const lngs = route.path.map(p => p.lng);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-    
-    const scale = (val: number, min: number, max: number) => {
-      const range = max - min || 1;
-      return ((val - min) / range) * 80 + 10; // Keep 10% margin
-    };
-
-    const points = route.path.map(p => ({
-      x: scale(p.lng, minLng, maxLng),
-      y: 100 - scale(p.lat, minLat, maxLat) // SVG Y is inverted
-    }));
-
-    const pathString = `M ${points[0].x} ${points[0].y} ` + 
-                      points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ');
-
-    const stopPoints = (stops || []).map(s => ({
-      id: s.stopId,
-      name: s.name,
-      x: scale(s.location.lng, minLng, maxLng),
-      y: 100 - scale(s.location.lat, minLat, maxLat)
-    }));
-
-    return { pathString, stopPoints };
-  }, [useDemoMode, route, stops]);
-
-  // Kakao Map Drawing Logic (Standard)
+  // Kakao Map Drawing Logic
   useEffect(() => {
     if (!isApiLoaded || !mapInstance.current) return;
     const map = mapInstance.current;
     const kakao = window.kakao;
 
+    // Clear existing elements
     markers.current.forEach(m => m.setMap(null));
     overlays.current.forEach(o => o.setMap(null));
     if (polyline.current) polyline.current.setMap(null);
+    markers.current = [];
+    overlays.current = [];
 
     const bounds = new kakao.maps.LatLngBounds();
     let hasPoints = false;
@@ -120,7 +93,7 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
     if (route?.path?.length) {
       const linePath = route.path.map(p => new kakao.maps.LatLng(p.lat, p.lng));
       polyline.current = new kakao.maps.Polyline({
-        path: linePath, strokeWeight: 6, strokeColor: '#FF6B00', strokeOpacity: 0.8
+        path: linePath, strokeWeight: 6, strokeColor: '#FF5C00', strokeOpacity: 0.8
       });
       polyline.current.setMap(map);
       linePath.forEach(p => bounds.extend(p));
@@ -134,7 +107,7 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
         const isSelected = stop.stopId === selectedStopId;
         const overlay = new kakao.maps.CustomOverlay({
           position: pos,
-          content: `<div class="kakao-label ${isSelected ? 'selected' : ''}">${stop.name}</div>`,
+          content: `<div class="kakao-label ${isSelected ? 'selected animate-bounce' : ''}">${stop.name}</div>`,
           yAnchor: 2.3
         });
         overlay.setMap(map);
@@ -145,85 +118,61 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
       });
     }
 
-    if (startPoint) bounds.extend(new kakao.maps.LatLng(startPoint.lat, startPoint.lng));
-    if (endPoint) bounds.extend(new kakao.maps.LatLng(endPoint.lat, endPoint.lng));
+    if (startPoint) {
+        bounds.extend(new kakao.maps.LatLng(startPoint.lat, startPoint.lng));
+        hasPoints = true;
+    }
+    if (endPoint) {
+        bounds.extend(new kakao.maps.LatLng(endPoint.lat, endPoint.lng));
+        hasPoints = true;
+    }
 
-    if (hasPoints) map.setBounds(bounds);
-    map.relayout();
+    if (hasPoints) {
+      map.setBounds(bounds);
+    }
+    
+    setTimeout(() => map.relayout(), 100);
   }, [isApiLoaded, route, stops, selectedStopId, startPoint, endPoint]);
 
-  // Demo Mode Placeholder View
+  const demoPathData = useMemo(() => {
+    if (!useDemoMode || !route?.path?.length) return null;
+    const lats = route.path.map(p => p.lat);
+    const lngs = route.path.map(p => p.lng);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const scale = (val: number, min: number, max: number) => {
+      const range = max - min || 1;
+      return ((val - min) / range) * 80 + 10;
+    };
+    const points = route.path.map(p => ({
+      x: scale(p.lng, minLng, maxLng),
+      y: 100 - scale(p.lat, minLat, maxLat)
+    }));
+    const pathString = `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ');
+    return { pathString };
+  }, [useDemoMode, route]);
+
   if (useDemoMode) {
     return (
-      <div className="w-full h-full bg-[#fdfdfd] flex flex-col items-center justify-center relative overflow-hidden">
-        {/* Abstract Grid Background */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
-        
-        {/* Visual Content */}
-        <div className="relative w-full h-full flex items-center justify-center p-12">
-            {demoPathData ? (
-                <div className="w-full h-full max-w-lg aspect-square relative bg-white rounded-[40px] shadow-2xl border border-gray-100 p-8 flex flex-col">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                            <Navigation className="w-5 h-5 text-primary" />
-                            <span className="font-bold text-gray-800">{route?.summary} 경로 스키마</span>
-                        </div>
-                        <div className="px-3 py-1 bg-orange-100 text-primary text-[10px] font-black rounded-full">DEMO VIEW</div>
-                    </div>
-                    
-                    <div className="flex-1 relative border-2 border-dashed border-gray-100 rounded-2xl overflow-hidden bg-gray-50/30">
-                        <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-lg">
-                            <path d={demoPathData.pathString} fill="none" stroke="#FF6B00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-[dash_3s_ease-in-out_infinite]" style={{ strokeDasharray: '200', strokeDashoffset: '0' }} />
-                            {demoPathData.stopPoints.map(p => (
-                                <g key={p.id}>
-                                    <circle cx={p.x} cy={p.y} r="1.5" fill="#1A202C" />
-                                    {p.id === selectedStopId && (
-                                        <circle cx={p.x} cy={p.y} r="3" fill="none" stroke="#FF6B00" strokeWidth="0.5">
-                                            <animate attributeName="r" from="1.5" to="5" dur="1.5s" repeatCount="indefinite" />
-                                            <animate attributeName="opacity" from="1" to="0" dur="1.5s" repeatCount="indefinite" />
-                                        </circle>
-                                    )}
-                                </g>
-                            ))}
-                        </svg>
-                        
-                        {/* Overlay Labels for selected stop */}
-                        {selectedStopId && (
-                            <div className="absolute top-4 right-4 bg-primary text-white text-xs font-bold px-3 py-2 rounded-xl shadow-lg animate-bounce">
-                                선택된 맛집: {stops?.find(s => s.stopId === selectedStopId)?.name}
-                            </div>
-                        )}
-                    </div>
-                    
-                    <div className="mt-4 flex items-center gap-2 text-gray-400 text-[10px] italic">
-                        <Info className="w-3 h-3" />
-                        API 키를 입력하면 실제 카카오 지도가 이 자리에 표시됩니다.
-                    </div>
-                </div>
-            ) : (
-                <div className="z-10 bg-white/90 backdrop-blur-md p-10 rounded-[40px] shadow-2xl border border-white max-w-sm text-center">
-                    <div className="w-20 h-20 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <MapIcon className="w-10 h-10" />
-                    </div>
-                    <h3 className="text-2xl font-black text-gray-800 mb-3 tracking-tight">RouteEats 테스트 모드</h3>
-                    <p className="text-gray-500 text-sm mb-8 leading-relaxed break-keep font-medium">
-                        현재 지도 API 키 없이 작동 중입니다.<br/>
-                        <span className="text-primary font-bold">주소 검색 및 AI 맛집 추천 기능</span>은<br/>정상적으로 테스트하실 수 있습니다.
-                    </p>
-                    <div className="p-4 bg-gray-50 rounded-2xl text-left space-y-2 border border-gray-100">
-                        <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                            <span className="text-xs font-bold text-gray-600">출발지 검색 가능</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                            <span className="text-xs font-bold text-gray-600">목적지 검색 가능</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-primary"></div>
-                            <span className="text-xs font-bold text-gray-600">AI 맛집 리스트 생성 가능</span>
-                        </div>
-                    </div>
+      <div className="w-full h-full bg-neutral-100 flex items-center justify-center p-8 text-center">
+        <div className="max-w-md bg-white p-10 rounded-[40px] shadow-premium border border-black/[0.03]">
+            <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <AlertCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-black text-neutral-900 mb-3 tracking-tight">지도 API 연결 안내</h3>
+            <p className="text-neutral-500 text-sm mb-6 leading-relaxed break-keep font-medium">
+                카카오 개발자 콘솔의 <strong>[플랫폼 > Web]</strong> 메뉴에서<br/>
+                <span className="text-primary font-bold">https://rideguide.vercel.app</span>를<br/>
+                '사이트 도메인'에 등록했는지 확인해 주세요.
+            </p>
+            {demoPathData && (
+                <div className="bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
+                    <p className="text-[11px] font-black text-neutral-400 uppercase mb-2">경로 미리보기 (데모)</p>
+                    <svg viewBox="0 0 100 100" className="w-32 h-32 mx-auto">
+                        <path d={demoPathData.pathString} fill="none" stroke="#FF5C00" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
                 </div>
             )}
         </div>
@@ -232,13 +181,13 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
   }
 
   return (
-    <div className="w-full h-full relative z-0">
-      <div ref={mapContainer} className="w-full h-full" />
-      {!isApiLoaded && (
-        <div className="absolute inset-0 bg-white flex items-center justify-center z-10">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-gray-400 font-bold text-sm">지도 초기화 중...</p>
+    <div className="w-full h-full relative overflow-hidden">
+      <div ref={mapContainer} className="w-full h-full bg-neutral-200" />
+      {!isApiLoaded && !useDemoMode && (
+        <div className="absolute inset-0 bg-neutral-100 flex items-center justify-center z-10">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-neutral-400 font-black text-sm tracking-tight">지도를 불러오고 있습니다...</p>
           </div>
         </div>
       )}
