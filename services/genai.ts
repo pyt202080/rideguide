@@ -5,6 +5,8 @@ import { MOCK_ROUTES } from "../constants";
 export const generateRoutes = async (start: string, destination: string, startCoords?: {lat: number, lng: number}, destCoords?: {lat: number, lng: number}): Promise<RouteOption[]> => {
   const hasKey = !!process.env.API_KEY;
 
+  // API 키가 없으면 어쩔 수 없이 MOCK 데이터를 반환하지만, 
+  // API 키가 있다면 반드시 사용자 입력(start, destination)을 기반으로 생성합니다.
   if (!hasKey || !start || !destination) {
     return new Promise(resolve => setTimeout(() => resolve(MOCK_ROUTES), 800));
   }
@@ -12,22 +14,21 @@ export const generateRoutes = async (start: string, destination: string, startCo
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   try {
-    let locationContext = `Plan 2 distinct driving routes from "${start}" to "${destination}" in South Korea.`;
-    
-    if (startCoords && destCoords) {
-        locationContext += ` Coordinates - Start:(${startCoords.lat}, ${startCoords.lng}), Dest:(${destCoords.lat}, ${destCoords.lng})`;
-    }
+    const locationContext = `Plan driving routes from "${start}" to "${destination}" in South Korea. 
+    Coordinates Context: Start(${startCoords?.lat}, ${startCoords?.lng}) to Destination(${destCoords?.lat}, ${destCoords?.lng}).`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `${locationContext}
       
-      [CRITICAL TASK: EXHAUSTIVE HIGHWAY TRAVERSAL]
-      1. **DATABASE COMPLETENESS:** You must act as a precise highway database. Identify the expressways used (e.g., Gyeongbu Expressway Line 1).
-      2. **ZERO OMISSION:** List EVERY single official rest area (휴게소) along the route in correct order. If there are 30 rest areas, list all 30. Never use "etc", "and others", or summarize.
-      3. **IC DINING:** Include top-rated local restaurants within 2km of major IC exits if there are gaps between rest areas.
-      4. **LANGUAGE:** All 'name', 'topItems', 'description', and 'summary' MUST be in Korean.
-      5. **DATA RICHNESS:** For every stop, provide accurate signature dishes and a 4.0-5.0 rating based on common reputation.
+      [CRITICAL DIRECTIVE: ACTUAL ROUTE GENERATION]
+      1. **NO DEFAULTS:** Do not default to Busan unless the user searched for Busan. Generate a path specifically for "${start}" to "${destination}".
+      2. **EXHAUSTIVE LIST:** Identify EVERY single official expressway rest area (휴게소) on this specific path. If there are 15-30 rest areas, list them all.
+      3. **SEQUENCE:** Arrange stops in strict driving order from start to destination.
+      4. **PATH ACCURACY:** Provide a realistic 'path' array of coordinates that connects "${start}" to "${destination}".
+      5. **IC DINING:** If there are long stretches without rest areas, include famous local restaurants within 2km of major IC exits.
+      6. **KOREAN ONLY:** All 'name', 'topItems', 'description', and 'summary' MUST be in Korean.
+      7. **STOPS DATA:** For each stop: Give 2-3 signature dishes (topItems), a concise description, and a 4.0-5.0 rating.
       `,
       config: {
         responseMimeType: "application/json",
