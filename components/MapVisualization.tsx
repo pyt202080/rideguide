@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { RouteOption, Stop, Coordinates } from '../types';
-import { Map as MapIcon, Navigation, Info, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 interface MapVisualizationProps {
   route?: RouteOption;
@@ -39,23 +39,30 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
   useEffect(() => {
     const initMap = () => {
       if (!mapContainer.current || !window.kakao || !window.kakao.maps) {
-        console.warn("Kakao maps SDK not found during init attempt");
         return;
       }
 
       window.kakao.maps.load(() => {
         try {
-          console.log("Kakao Map API successfully loaded");
           const options = {
             center: new window.kakao.maps.LatLng(36.5, 127.5),
             level: 12
           };
           const map = new window.kakao.maps.Map(mapContainer.current, options);
           mapInstance.current = map;
+          
+          // Add click listener if onMapClick is provided
+          window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
+            if (onMapClick) {
+              const latlng = mouseEvent.latLng;
+              onMapClick({ lat: latlng.getLat(), lng: latlng.getLng() });
+            }
+          });
+
           setIsApiLoaded(true);
           setUseDemoMode(false);
         } catch (err) {
-          console.error("Map initialization failed:", err);
+          console.error("Kakao Map initialization failed:", err);
           setUseDemoMode(true);
         }
       });
@@ -65,14 +72,13 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
     
     if (typeof window.kakao !== 'undefined' && window.kakao.maps) {
       initMap();
-    } else if (retryCount < 20) {
+    } else if (retryCount < 30) {
       const timer = setTimeout(() => setRetryCount(prev => prev + 1), 500);
       return () => clearTimeout(timer);
     } else {
-      console.error("Kakao Maps API failed to load after 20 retries.");
       setUseDemoMode(true);
     }
-  }, [retryCount]);
+  }, [retryCount, onMapClick]);
 
   // Kakao Map Drawing Logic
   useEffect(() => {
@@ -119,11 +125,17 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
     }
 
     if (startPoint) {
-        bounds.extend(new kakao.maps.LatLng(startPoint.lat, startPoint.lng));
+        const pos = new kakao.maps.LatLng(startPoint.lat, startPoint.lng);
+        const marker = new kakao.maps.Marker({ position: pos, map: map });
+        markers.current.push(marker);
+        bounds.extend(pos);
         hasPoints = true;
     }
     if (endPoint) {
-        bounds.extend(new kakao.maps.LatLng(endPoint.lat, endPoint.lng));
+        const pos = new kakao.maps.LatLng(endPoint.lat, endPoint.lng);
+        const marker = new kakao.maps.Marker({ position: pos, map: map });
+        markers.current.push(marker);
+        bounds.extend(pos);
         hasPoints = true;
     }
 
