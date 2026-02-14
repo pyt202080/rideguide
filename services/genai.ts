@@ -12,21 +12,22 @@ export const generateRoutes = async (start: string, destination: string, startCo
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   try {
-    let locationContext = `Plan 2-3 distinct driving routes from "${start}" to "${destination}" in South Korea.`;
+    let locationContext = `Plan 2 distinct driving routes from "${start}" to "${destination}" in South Korea.`;
     
     if (startCoords && destCoords) {
-        locationContext += ` Start:(${startCoords.lat}, ${startCoords.lng}), Dest:(${destCoords.lat}, ${destCoords.lng})`;
+        locationContext += ` Coordinates - Start:(${startCoords.lat}, ${startCoords.lng}), Dest:(${destCoords.lat}, ${destCoords.lng})`;
     }
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `${locationContext}
       
-      CRITICAL INSTRUCTION (KOREAN):
-      1. **전수 조사(Exhaustive List) 수행:** 해당 경로상에 존재하는 **모든 정식 고속도로 휴게소**를 주행 순서대로 나열하세요.
-      2. **IC 인근 맛집 포함:** 고속도로 휴게소뿐만 아니라, 주요 IC(나들목)에서 5~10분 내로 접근 가능한 **유명 지역 맛집(local_restaurant)**도 경로 중간중간에 포함시키세요.
-      3. **생략 금지:** 장거리 노선에서 리스트를 요약하지 마세요. 200km 이상의 경로는 휴게소와 IC 맛집을 합쳐 보통 15~25개의 지점이 존재해야 합니다.
-      4. **상세 정보:** 각 지점별로 가장 유명한 메뉴 2개와 특징을 'break-keep' 스타일로 작성하세요.
+      [CRITICAL TASK: EXHAUSTIVE HIGHWAY TRAVERSAL]
+      1. **DATABASE COMPLETENESS:** You must act as a precise highway database. Identify the expressways used (e.g., Gyeongbu Expressway Line 1).
+      2. **ZERO OMISSION:** List EVERY single official rest area (휴게소) along the route in correct order. If there are 30 rest areas, list all 30. Never use "etc", "and others", or summarize.
+      3. **IC DINING:** Include top-rated local restaurants within 2km of major IC exits if there are gaps between rest areas.
+      4. **LANGUAGE:** All 'name', 'topItems', 'description', and 'summary' MUST be in Korean.
+      5. **DATA RICHNESS:** For every stop, provide accurate signature dishes and a 4.0-5.0 rating based on common reputation.
       `,
       config: {
         responseMimeType: "application/json",

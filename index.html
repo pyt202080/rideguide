@@ -13,11 +13,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     
-    <!-- 
-      KAKAO MAPS API: 
-      사용자의 새로운 JavaScript 키 '42f17f0e043626ebc0f7a3919606b9a1' 적용됨.
-      도메인 등록 확인됨: https://rideguide.vercel.app/
-    -->
+    <!-- KAKAO MAPS API -->
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=42f17f0e043626ebc0f7a3919606b9a1&libraries=services,clusterer,drawing&autoload=false"></script>
     
     <script>
@@ -40,8 +36,8 @@
     <style>
       body { font-family: 'Pretendard', sans-serif; }
       .glass { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-      .kakao-label { background: white; padding: 6px 14px; border-radius: 100px; border: 1px solid rgba(0,0,0,0.05); font-weight: 700; font-size: 13px; color: #111827; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); white-space: nowrap; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none; }
-      .kakao-label.selected { background: #FF5C00; color: white; border-color: #FF5C00; transform: scale(1.1) translateY(-5px); }
+      .kakao-label { background: white; padding: 4px 10px; border-radius: 100px; border: 1px solid rgba(0,0,0,0.05); font-weight: 800; font-size: 11px; color: #111827; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); white-space: nowrap; transition: all 0.2s; pointer-events: none; }
+      .kakao-label.selected { background: #FF5C00; color: white; border-color: #FF5C00; transform: scale(1.1); z-index: 50; }
       @keyframes fade-in-up {
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
