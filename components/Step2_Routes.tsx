@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { RouteOption, SearchState, Stop } from '../types';
-import { Clock, Navigation, Sparkles, Star, ArrowLeft, MapPin, ChevronRight, Map, Info, ExternalLink } from 'lucide-react';
+import { Clock, Navigation, Sparkles, Star, ArrowLeft, MapPin, ChevronRight, Info, ExternalLink, AlertCircle, RefreshCcw } from 'lucide-react';
 import { generateRoutes } from '../services/genai';
 
 interface Step2Props {
@@ -82,20 +82,28 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
     return () => clearInterval(msgInterval);
   }, [loading]);
 
+  const fetchRoutes = async () => {
+    setLoading(true);
+    try {
+      const data = await generateRoutes(searchData.start, searchData.destination, searchData.startCoordinates, searchData.destinationCoordinates);
+      setRoutes(data);
+      if (data.length > 0) setActiveRouteId(data[0].routeId);
+      else setActiveRouteId(null);
+    } catch (err) { 
+      console.error(err);
+      setRoutes([]);
+    } finally { 
+      setLoading(false); 
+    }
+  };
+
   useEffect(() => {
-    const fetchRoutes = async () => {
-      setLoading(true);
-      try {
-        const data = await generateRoutes(searchData.start, searchData.destination, searchData.startCoordinates, searchData.destinationCoordinates);
-        setRoutes(data);
-        if (data.length > 0) setActiveRouteId(data[0].routeId);
-      } catch (err) { console.error(err); } finally { setLoading(false); }
-    };
     fetchRoutes();
   }, [searchData]);
 
   const activeRoute = routes.find(r => r.routeId === activeRouteId);
   const formatName = (name: string) => name.split('(')[0].split(',')[0].trim();
+  const isAIActive = !!process.env.API_KEY;
 
   if (loading) {
     return (
@@ -114,99 +122,140 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
     );
   }
 
+  if (routes.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8 bg-neutral-50 animate-fade-in-up">
+        <div className="w-20 h-20 bg-neutral-100 rounded-full flex items-center justify-center mb-6">
+          <AlertCircle className="w-10 h-10 text-neutral-400" />
+        </div>
+        <h3 className="text-xl font-black text-neutral-900 mb-2 tracking-tight">검색 결과를 찾지 못했습니다</h3>
+        <p className="text-sm text-neutral-500 font-medium mb-8 text-center break-keep max-w-xs">
+          실시간 정보를 불러오는 중에 문제가 발생했거나 해당 경로의 데이터가 충분하지 않습니다.
+        </p>
+        <div className="flex gap-3">
+          <button onClick={onBack} className="px-6 py-3 bg-white border border-neutral-200 rounded-2xl font-black text-sm text-neutral-600 hover:bg-neutral-100 transition-all">
+            이전으로
+          </button>
+          <button onClick={fetchRoutes} className="px-6 py-3 bg-primary text-white rounded-2xl font-black text-sm shadow-lg shadow-primary/20 hover:bg-primary-dark transition-all flex items-center gap-2">
+            <RefreshCcw className="w-4 h-4" /> 다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full bg-neutral-50/30 overflow-hidden">
-      <div className="flex-none bg-white border-b border-black/[0.03] shadow-sm z-20">
+    <div className="flex flex-col h-full bg-neutral-50/30 overflow-y-auto">
+      {/* 1. 최상단 브랜드 헤더 (스크롤 시 사라짐) */}
+      <header className="flex-none h-14 bg-white border-b border-black/[0.03] flex items-center justify-between px-6 z-10">
+        <div className="flex items-center gap-2 cursor-pointer" onClick={onBack}>
+            <div className="w-7 h-7 bg-primary flex items-center justify-center text-white rounded-lg shadow-md">
+                <span className="font-black text-sm">뭐</span>
+            </div>
+            <span className="font-black text-base tracking-tight text-neutral-900 underline decoration-primary/30 underline-offset-4 decoration-2">뭐 <span className="text-primary">무까?</span></span>
+        </div>
+        <div className={`text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1.5 border ${isAIActive ? 'bg-orange-50 border-orange-100 text-primary' : 'bg-neutral-100 border-neutral-200 text-neutral-400'}`}>
+            <div className={`w-1 h-1 rounded-full ${isAIActive ? 'bg-primary animate-pulse' : 'bg-neutral-300'}`}></div>
+            {isAIActive ? 'AI Smart' : 'Demo'}
+        </div>
+      </header>
+
+      {/* 2. 경로 정보 섹션 (스크롤 시 사라짐) */}
+      <div className="flex-none bg-white">
         <div className="max-w-5xl mx-auto px-6 py-6">
-          <div className="flex items-center gap-3 mb-6">
-            <button onClick={onBack} className="p-2.5 bg-neutral-100 hover:bg-neutral-200 rounded-full transition-all text-neutral-500 active:scale-90">
-              <ArrowLeft className="w-5 h-5" />
+          <div className="flex items-center gap-3 mb-5">
+            <button onClick={onBack} className="p-2 bg-neutral-100 hover:bg-neutral-200 rounded-full transition-all text-neutral-500 active:scale-90 flex-none">
+              <ArrowLeft className="w-4 h-4" />
             </button>
-            <div className="flex items-center gap-2 px-4 py-2 bg-neutral-50 rounded-2xl border border-black/[0.03] shadow-inner">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-500/10"></div>
-                <span className="text-[13px] font-black text-neutral-800 max-w-[100px] md:max-w-[200px] truncate">{formatName(searchData.start)}</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-50 rounded-xl border border-black/[0.03] shadow-inner overflow-hidden flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 flex-none"></div>
+                <span className="text-[12px] font-black text-neutral-800 truncate">{formatName(searchData.start)}</span>
               </div>
-              <ChevronRight className="w-4 h-4 text-neutral-300 mx-1" />
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-4 ring-rose-500/10"></div>
-                <span className="text-[13px] font-black text-neutral-800 max-w-[100px] md:max-w-[200px] truncate">{formatName(searchData.destination)}</span>
+              <ChevronRight className="w-3 h-3 text-neutral-300 mx-0.5 flex-none" />
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="w-2 h-2 rounded-full bg-rose-500 flex-none"></div>
+                <span className="text-[12px] font-black text-neutral-800 truncate">{formatName(searchData.destination)}</span>
               </div>
             </div>
           </div>
           
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex-1">
-              <h2 className="text-3xl font-black text-neutral-900 tracking-tighter leading-[1.1] mb-2 drop-shadow-sm">
+              <h2 className="text-2xl font-black text-neutral-900 tracking-tighter leading-tight mb-1">
                 {activeRoute?.summary || '탐색 완료'}
               </h2>
-              <div className="flex items-center gap-2 text-neutral-400 font-bold text-sm">
-                <Sparkles className="w-4 h-4 text-primary" />
-                <span>Google Search로 수집한 실시간 고속도로 정보입니다.</span>
+              <div className="flex items-center gap-1.5 text-neutral-400 font-bold text-[12px]">
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
+                <span>실시간 고속도로 정보 수집 완료</span>
               </div>
             </div>
             
-            <div className="flex items-center gap-3 flex-none">
-              <div className="px-5 py-3.5 bg-white rounded-2xl border border-neutral-100 shadow-soft flex flex-col min-w-[110px]">
-                <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1">예상 시간</span>
-                <span className="text-xl font-black text-neutral-900 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-primary" />
-                  {activeRoute && `${Math.floor(activeRoute.durationMin / 60)}h ${activeRoute.durationMin % 60}m`}
-                </span>
-              </div>
-              <div className="px-5 py-3.5 bg-white rounded-2xl border border-neutral-100 shadow-soft flex flex-col min-w-[110px]">
-                <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1">총 거리</span>
-                <span className="text-xl font-black text-neutral-900 flex items-center gap-2">
-                  <Navigation className="w-4 h-4 text-emerald-500" />
-                  {activeRoute?.distanceKm}km
-                </span>
+            <div className="flex items-center gap-2 flex-none">
+              <div className="px-4 py-2 bg-neutral-50 rounded-xl border border-neutral-100 flex items-center gap-3">
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-black text-neutral-400 uppercase tracking-widest leading-none mb-1">Time</span>
+                  <span className="text-[15px] font-black text-neutral-900 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-primary" />
+                    {activeRoute && `${Math.floor(activeRoute.durationMin / 60)}h ${activeRoute.durationMin % 60}m`}
+                  </span>
+                </div>
+                <div className="w-[1px] h-6 bg-neutral-200"></div>
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-black text-neutral-400 uppercase tracking-widest leading-none mb-1">Dist</span>
+                  <span className="text-[15px] font-black text-neutral-900 flex items-center gap-1.5">
+                    <Navigation className="w-3.5 h-3.5 text-emerald-500" />
+                    {activeRoute?.distanceKm}km
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="max-w-5xl mx-auto px-6 flex items-center gap-2 overflow-x-auto no-scrollbar pb-4 -mt-2">
+      {/* 3. 경로 선택 탭 (스크롤 시 최상단 고정 - 공간 확보의 핵심) */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-black/[0.05] shadow-sm">
+        <div className="max-w-5xl mx-auto px-6 flex items-center gap-2 overflow-x-auto no-scrollbar py-2.5">
           {routes.map((route) => (
             <button
               key={route.routeId}
               onClick={() => setActiveRouteId(route.routeId)}
-              className={`px-6 py-3 text-[14px] font-black whitespace-nowrap rounded-2xl transition-all flex items-center gap-2 border ${
+              className={`px-4 py-2 text-[12px] font-black whitespace-nowrap rounded-lg transition-all flex items-center gap-1.5 border ${
                 activeRouteId === route.routeId 
-                  ? 'bg-neutral-900 text-white border-neutral-900 shadow-lg shadow-neutral-900/20 translate-y-[-2px]' 
+                  ? 'bg-neutral-900 text-white border-neutral-900 shadow-md' 
                   : 'bg-white text-neutral-400 border-neutral-100 hover:border-neutral-200 hover:text-neutral-600'
               }`}
             >
-              {activeRouteId === route.routeId && <Sparkles className="w-3.5 h-3.5 text-primary" />}
+              {activeRouteId === route.routeId && <Sparkles className="w-3 h-3 text-primary" />}
               {route.summary.split('(')[0]}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pt-8 pb-20">
+      {/* 4. 본문 목록 (컨텐츠 공간 최대화) */}
+      <div className="flex-none pt-6 pb-20">
         <div className="max-w-5xl mx-auto px-6">
-          
-          <div className="flex justify-center md:justify-start mb-10">
-            <div className="inline-flex items-center gap-3 px-6 py-3.5 bg-primary/5 rounded-2xl border border-primary/10 shadow-sm animate-fade-in-up">
-              <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <p className="text-[14px] font-black text-neutral-800 tracking-tight">
-                실시간 검색 결과 <span className="text-primary text-base px-0.5">{activeRoute?.stops.length}곳</span>의 시설을 발견했습니다.
+          <div className="flex justify-center md:justify-start mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/5 rounded-xl border border-primary/10 shadow-sm">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              <p className="text-[12px] font-black text-neutral-800 tracking-tight">
+                경로상 <span className="text-primary text-[14px]">{activeRoute?.stops.length}곳</span>의 휴게소를 찾았습니다.
               </p>
             </div>
           </div>
 
-          <div className="bg-white rounded-[40px] p-8 md:p-14 shadow-premium border border-black/[0.02] relative overflow-hidden transition-all">
-            <div className="absolute top-0 left-[4.8rem] bottom-0 w-[2px] bg-neutral-100 hidden md:block"></div>
+          <div className="bg-white rounded-[32px] p-6 md:p-10 shadow-premium border border-black/[0.02] relative overflow-hidden transition-all">
+            <div className="absolute top-0 left-[3.8rem] bottom-0 w-[1.5px] bg-neutral-100 hidden md:block"></div>
             
-            <div className="flex items-center gap-4 mb-12 relative z-10 group">
-              <div className="w-11 h-11 rounded-full bg-emerald-500 border-4 border-white shadow-xl flex items-center justify-center text-white ring-4 ring-emerald-500/5 group-hover:scale-110 transition-transform">
-                <MapPin className="w-5 h-5" />
+            <div className="flex items-center gap-3 mb-10 relative z-10">
+              <div className="w-9 h-9 rounded-full bg-emerald-500 border-4 border-white shadow-lg flex items-center justify-center text-white flex-none">
+                <MapPin className="w-4 h-4" />
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Departure</span>
-                <span className="text-[17px] font-black text-neutral-900 tracking-tight">{searchData.start}</span>
+                <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Start</span>
+                <span className="text-[15px] font-black text-neutral-900 truncate max-w-[200px]">{searchData.start}</span>
               </div>
             </div>
 
@@ -220,45 +269,45 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
               ))}
             </div>
 
-            <div className="flex items-center gap-4 mt-12 relative z-10 group">
-              <div className="w-11 h-11 rounded-full bg-rose-500 border-4 border-white shadow-xl flex items-center justify-center text-white ring-4 ring-rose-500/5 group-hover:scale-110 transition-transform">
-                <MapPin className="w-5 h-5" />
+            <div className="flex items-center gap-3 mt-10 relative z-10">
+              <div className="w-9 h-9 rounded-full bg-rose-500 border-4 border-white shadow-lg flex items-center justify-center text-white flex-none">
+                <MapPin className="w-4 h-4" />
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-0.5">Arrival</span>
-                <span className="text-[17px] font-black text-neutral-900 tracking-tight">{searchData.destination}</span>
+                <span className="text-[9px] font-black text-rose-600 uppercase tracking-widest">End</span>
+                <span className="text-[15px] font-black text-neutral-900 truncate max-w-[200px]">{searchData.destination}</span>
               </div>
             </div>
           </div>
 
           {/* Data Sources Section */}
           {activeRoute?.sources && activeRoute.sources.length > 0 && (
-            <div className="mt-12 bg-white rounded-3xl p-8 border border-black/[0.03] shadow-soft">
-              <div className="flex items-center gap-2 mb-6">
-                <Info className="w-4 h-4 text-primary" />
-                <h3 className="text-sm font-black text-neutral-800 uppercase tracking-wider">데이터 출처 및 참고 문헌</h3>
+            <div className="mt-8 bg-white rounded-2xl p-6 border border-black/[0.03] shadow-soft">
+              <div className="flex items-center gap-2 mb-4">
+                <Info className="w-3.5 h-3.5 text-primary" />
+                <h3 className="text-[11px] font-black text-neutral-800 uppercase tracking-wider">검색 데이터 출처</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {activeRoute.sources.map((source, idx) => (
                   <a 
                     key={idx} 
                     href={source.uri} 
                     target="_blank" 
                     rel="noreferrer"
-                    className="flex items-center justify-between p-4 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors group"
+                    className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg hover:bg-neutral-100 transition-colors group"
                   >
-                    <span className="text-[13px] font-bold text-neutral-600 truncate max-w-[80%]">{source.title}</span>
-                    <ExternalLink className="w-3.5 h-3.5 text-neutral-300 group-hover:text-primary transition-colors" />
+                    <span className="text-[12px] font-bold text-neutral-500 truncate max-w-[85%]">{source.title}</span>
+                    <ExternalLink className="w-3 h-3 text-neutral-300 group-hover:text-primary" />
                   </a>
                 ))}
               </div>
             </div>
           )}
           
-          <div className="mt-12 flex flex-col items-center gap-2">
-            <div className="w-12 h-1 bg-neutral-200 rounded-full mb-2"></div>
-            <p className="text-center text-[12px] font-bold text-neutral-300 max-w-sm break-keep leading-relaxed">
-              본 정보는 구글 실시간 검색 결과를 바탕으로 생성되었습니다. 실제 도로 상황에 따라 차이가 있을 수 있습니다.
+          <div className="mt-10 flex flex-col items-center gap-1.5 opacity-50">
+            <div className="w-10 h-1 bg-neutral-200 rounded-full mb-1"></div>
+            <p className="text-center text-[11px] font-bold text-neutral-400 max-w-sm break-keep leading-relaxed">
+              본 정보는 구글 실시간 검색을 통해 자동 생성되었습니다. 실제 상황은 차이가 있을 수 있습니다.
             </p>
           </div>
         </div>

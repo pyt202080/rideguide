@@ -103,11 +103,31 @@ const Step1_Search: React.FC<Step1Props> = ({ onSearch, initialData }) => {
   };
 
   const isReady = start.trim() && destination.trim();
+  const isAIActive = !!process.env.API_KEY;
 
   return (
     <div className="flex flex-col h-full w-full bg-neutral-50 relative">
+      {/* Step 1 Header */}
+      <header className="flex-none h-16 glass border-b border-black/[0.03] flex items-center justify-between px-6 z-[100]">
+        <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-primary flex items-center justify-center text-white rounded-xl shadow-lg shadow-primary/20">
+                <span className="font-black text-lg">뭐</span>
+            </div>
+            <div className="flex flex-col -space-y-1">
+                <span className="font-black text-xl tracking-tight text-neutral-900">뭐 <span className="text-primary">무까?</span></span>
+                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Highway Guide</span>
+            </div>
+        </div>
+        <div className="flex items-center gap-4">
+            <div className={`text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-2 border ${isAIActive ? 'bg-orange-50 border-orange-100 text-primary' : 'bg-neutral-100 border-neutral-200 text-neutral-400'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${isAIActive ? 'bg-primary animate-pulse' : 'bg-neutral-300'}`}></div>
+                {isAIActive ? 'AI Smart Search' : 'Demo Mode'}
+            </div>
+        </div>
+      </header>
+
       {/* Search Overlay Panel */}
-      <div className={`absolute top-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[420px] md:left-10 md:translate-x-0 glass rounded-[32px] p-6 md:p-8 z-30 shadow-premium border border-white/50 transition-all duration-500 ${mapSelectionMode ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'}`}>
+      <div className={`absolute top-24 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[420px] md:left-10 md:translate-x-0 glass rounded-[32px] p-6 md:p-8 z-30 shadow-premium border border-white/50 transition-all duration-500 ${mapSelectionMode ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'}`}>
           <div className="mb-8">
             <h1 className="text-2xl font-black text-neutral-900 tracking-tight leading-tight mb-2">어디로 가시나요?</h1>
             <p className="text-sm text-neutral-500 font-medium">실시간 경로와 휴게소 맛집을 찾아드릴게요.</p>
