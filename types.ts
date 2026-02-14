@@ -1,4 +1,3 @@
-
 // Add LOCAL_RESTAURANT to StopType enum to resolve property missing errors in constants and components
 export enum StopType {
   HIGHWAY_REST_AREA = 'highway_rest_area',
@@ -8,6 +7,11 @@ export enum StopType {
 export interface Coordinates {
   lat: number;
   lng: number;
+}
+
+export interface GroundingSource {
+  title: string;
+  uri: string;
 }
 
 export interface Stop {
@@ -34,6 +38,7 @@ export interface RouteOption {
   toll: boolean;
   path: Coordinates[];
   stops: Stop[];
+  sources?: GroundingSource[];
 }
 
 export type AppStep = 1 | 2 | 3;

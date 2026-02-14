@@ -1,35 +1,38 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { RouteOption, StopType } from "../types";
+import { RouteOption, StopType, GroundingSource } from "../types";
 import { MOCK_ROUTES } from "../constants";
 
 export const generateRoutes = async (start: string, destination: string, startCoords?: {lat: number, lng: number}, destCoords?: {lat: number, lng: number}): Promise<RouteOption[]> => {
   const hasKey = !!process.env.API_KEY;
 
   if (!hasKey || !start || !destination) {
-    return new Promise(resolve => setTimeout(() => resolve(MOCK_ROUTES), 800));
+    if (destination.includes('안동')) {
+      return new Promise(resolve => setTimeout(() => resolve(MOCK_ROUTES), 800));
+    } else {
+      const reversed = [...MOCK_ROUTES].reverse();
+      return new Promise(resolve => setTimeout(() => resolve(reversed), 800));
+    }
   }
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   try {
-    const locationContext = `Plan driving routes from "${start}" to "${destination}" in South Korea. 
-    Start: (${startCoords?.lat}, ${startCoords?.lng}), Dest: (${destCoords?.lat}, ${destCoords?.lng})`;
+    const locationContext = `Route: "${start}" to "${destination}" in South Korea.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3-pro-preview", // 복잡한 데이터 구성을 위해 Pro 모델 사용
       contents: `${locationContext}
       
-      [CRITICAL: RAW INFRASTRUCTURE DATABASE MODE]
-      1. **OBJECTIVE:** Provide a 100% complete, non-summarized inventory of all highway service areas.
-      2. **STRICT ZERO-SUMMARY POLICY:** Do not "recommend" or "curate". You are forbidden from choosing only popular stops. 
-      3. **ENUMERATE EVERYTHING:** If there are 15 service areas along the route, you MUST return all 15. Omitting a single official rest area (휴게소) is a violation of this instruction. 
-      4. **PATH:** Use main South Korean Expressways (Gyeongbu, Jungbu-Naeryuk, Yeongdong, etc.) that connect the points.
-      5. **DATA DEPTH:** Include small-scale rest areas and 간이휴게소 as well.
-      6. **IC DINING:** Add 2-3 extra local famous restaurants near major IC exits.
-      7. **LANGUAGE:** Korean for 'name', 'topItems', 'description', 'summary'.
-      8. **ORDER:** Perfect chronological order as encountered while driving.
+      [TASK: REAL-WORLD DATA RETRIEVAL]
+      1. Use Google Search Grounding to find the ACTUAL expressways and ALL official rest areas (고속도로 휴게소) on this route.
+      2. Identify REAL signature dishes for each rest area (e.g., Anseong: Sotteok, Deokpyeong: Beef Soup).
+      3. Verify the actual distance (km) and estimated driving time (min).
+      4. Do NOT use fake or sample data. If you find real data, use it.
+      5. Return EXACTLY 2 distinct route options in valid JSON format.
+      6. All text should be in Korean.
       `,
       config: {
+        tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -45,10 +48,7 @@ export const generateRoutes = async (start: string, destination: string, startCo
                 type: Type.ARRAY,
                 items: {
                   type: Type.OBJECT,
-                  properties: {
-                    lat: { type: Type.NUMBER },
-                    lng: { type: Type.NUMBER },
-                  }
+                  properties: { lat: { type: Type.NUMBER }, lng: { type: Type.NUMBER } }
                 }
               },
               stops: {
@@ -61,15 +61,9 @@ export const generateRoutes = async (start: string, destination: string, startCo
                     name: { type: Type.STRING },
                     location: {
                       type: Type.OBJECT,
-                      properties: {
-                        lat: { type: Type.NUMBER },
-                        lng: { type: Type.NUMBER },
-                      }
+                      properties: { lat: { type: Type.NUMBER }, lng: { type: Type.NUMBER } }
                     },
-                    topItems: {
-                      type: Type.ARRAY,
-                      items: { type: Type.STRING }
-                    },
+                    topItems: { type: Type.ARRAY, items: { type: Type.STRING } },
                     description: { type: Type.STRING },
                     rating: { type: Type.NUMBER }
                   }
@@ -81,15 +75,34 @@ export const generateRoutes = async (start: string, destination: string, startCo
       }
     });
 
-    const routes = JSON.parse(response.text || '[]') as any[];
+    // Extract Grounding Sources
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const sources: GroundingSource[] = groundingChunks
+      .filter((chunk: any) => chunk.web)
+      .map((chunk: any) => ({
+        title: chunk.web.title || "웹 검색 결과",
+        uri: chunk.web.uri
+      }));
+
+    // Robust JSON Parsing
+    let rawText = response.text || '[]';
+    // Remove markdown code blocks if present
+    if (rawText.includes('```json')) {
+      rawText = rawText.split('```json')[1].split('```')[0];
+    } else if (rawText.includes('```')) {
+      rawText = rawText.split('```')[1].split('```')[0];
+    }
     
-    return routes.map((route, i) => ({
+    const rawData = JSON.parse(rawText.trim());
+    
+    return rawData.map((route: any, i: number) => ({
       ...route,
-      routeId: `gen_route_${i}_${Date.now()}`,
+      routeId: `real_route_${i}_${Date.now()}`,
+      sources: sources,
       stops: (route.stops || []).map((stop: any, j: number) => ({
         ...stop,
-        stopId: `gen_stop_${i}_${j}`,
-        imageUrl: `https://picsum.photos/400/300?random=${Math.floor(Math.random() * 1000) + j}`,
+        stopId: `real_stop_${i}_${j}`,
+        imageUrl: `https://picsum.photos/400/300?restarea&sig=${i}${j}`,
         searchLinks: {
           naver: `https://map.naver.com/v5/search/${encodeURIComponent(stop.name)}`,
           google: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stop.name)}`,
@@ -100,6 +113,7 @@ export const generateRoutes = async (start: string, destination: string, startCo
 
   } catch (error) {
     console.error("Gemini API Error:", error);
+    // Return mock data only on actual failure
     return MOCK_ROUTES;
   }
 };
