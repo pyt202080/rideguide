@@ -4,12 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>뭐 무까? - 대한민국 모든 휴게소 맛집 가이드</title>
+    
+    <!-- 1. 브라우저에서 process.env 참조 시 크래시 방지 -->
+    <script>
+      if (typeof window.process === 'undefined') {
+        window.process = { env: {} };
+      }
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     
     <!-- 
       KAKAO MAPS API KEY NOTICE:
-      Replace 'YOUR_KAKAO_APP_KEY' with your actual JavaScript Key.
+      카카오 지도 API 키를 'YOUR_KAKAO_APP_KEY' 자리에 넣으세요.
     -->
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_APP_KEY&libraries=services,clusterer,drawing&autoload=false"></script>
     
@@ -17,34 +25,14 @@
       tailwind.config = {
         theme: {
           extend: {
-            fontFamily: {
-              sans: ['Pretendard', 'sans-serif'],
-            },
+            fontFamily: { sans: ['Pretendard', 'sans-serif'] },
             colors: {
-              primary: {
-                DEFAULT: '#FF5C00',
-                light: '#FF8A4D',
-                dark: '#E65200',
-              },
-              neutral: {
-                50: '#F9FAFB',
-                100: '#F3F4F6',
-                800: '#1F2937',
-                900: '#111827',
-              }
+              primary: { DEFAULT: '#FF5C00', light: '#FF8A4D', dark: '#E65200' },
+              neutral: { 50: '#F9FAFB', 100: '#F3F4F6', 800: '#1F2937', 900: '#111827' }
             },
             boxShadow: {
               'soft': '0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
               'premium': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            },
-            animation: {
-              'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
-            },
-            keyframes: {
-              fadeInUp: {
-                '0%': { opacity: '0', transform: 'translateY(10px)' },
-                '100%': { opacity: '1', transform: 'translateY(0)' },
-              }
             }
           }
         }
@@ -52,49 +40,26 @@
     </script>
     <style>
       body { font-family: 'Pretendard', sans-serif; }
-      ::-webkit-scrollbar { width: 6px; }
-      ::-webkit-scrollbar-track { background: #f9fafb; }
-      ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
-      ::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
-      
-      .glass {
-        background: rgba(255, 255, 255, 0.85);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-      }
-
-      .kakao-label {
-        background: white;
-        padding: 6px 14px;
-        border-radius: 100px;
-        border: 1px solid rgba(0,0,0,0.05);
-        font-weight: 700;
-        font-size: 13px;
-        color: #111827;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        white-space: nowrap;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      .kakao-label.selected {
-        background: #FF5C00;
-        color: white;
-        border-color: #FF5C00;
-        transform: scale(1.1) translateY(-5px);
-      }
+      .glass { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+      .kakao-label { background: white; padding: 6px 14px; border-radius: 100px; border: 1px solid rgba(0,0,0,0.05); font-weight: 700; font-size: 13px; color: #111827; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); white-space: nowrap; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+      .kakao-label.selected { background: #FF5C00; color: white; border-color: #FF5C00; transform: scale(1.1) translateY(-5px); }
     </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
     "react/": "https://esm.sh/react@^19.2.4/",
     "react": "https://esm.sh/react@^19.2.4",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.564.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.41.0"
+    "lucide-react": "https://esm.sh/lucide-react@^0.564.0"
   }
 }
 </script>
 </head>
   <body class="bg-neutral-50 text-neutral-900 antialiased h-screen overflow-hidden">
     <div id="root" class="h-full"></div>
+    <script type="module" src="./index.tsx"></script>
   </body>
 </html>
