@@ -172,11 +172,11 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
                 <AlertCircle className="w-8 h-8" />
             </div>
             <h3 className="text-xl font-black text-neutral-900 mb-3 tracking-tight">지도 API 연결 안내</h3>
-            <p className="text-neutral-500 text-sm mb-6 leading-relaxed break-keep font-medium">
-                카카오 개발자 콘솔의 <strong>[플랫폼 {' > '} Web]</strong> 메뉴에서<br/>
+            <div className="text-neutral-500 text-sm mb-6 leading-relaxed break-keep font-medium">
+                카카오 개발자 콘솔의 <strong>[플랫폼 &gt; Web]</strong> 메뉴에서<br/>
                 <span className="text-primary font-bold">https://rideguide.vercel.app</span> 를<br/>
                 '사이트 도메인'에 정확히 등록했는지 확인해 주세요.
-            </p>
+            </div>
             {demoPathData && (
                 <div className="bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
                     <p className="text-[11px] font-black text-neutral-400 uppercase mb-2">경로 미리보기 (데모)</p>
