@@ -41,7 +41,7 @@ interface RouteOption {
 const KAKAO_MOBILITY_BASE = "https://apis-navi.kakaomobility.com/v1/directions";
 const KAKAO_KEYWORD_BASE = "https://dapi.kakao.com/v2/local/search/keyword.json";
 const KAKAO_ADDRESS_BASE = "https://dapi.kakao.com/v2/local/search/address.json";
-const REST_AREA_QUERY = "\uACE0\uC18D\uB3C4\uB85C \uD734\uAC8C\uC18C";
+const REST_AREA_QUERIES = ["\uD734\uAC8C\uC18C", "\uACE0\uC18D\uB3C4\uB85C \uD734\uAC8C\uC18C"];
 
 const EXCLUDE_REST_AREA_KEYWORDS = [
   "\uB3D9\uBB3C",
@@ -64,7 +64,8 @@ const REST_AREA_MENU_HINTS: Record<string, string[]> = {
   "\uBB38\uACBD\uD734\uAC8C\uC18C": ["\uC57D\uB3CC\uB3FC\uC9C0\uC815\uC2DD", "\uC789\uC5B4\uBE75"],
   "\uD589\uB2F4\uB3C4\uD734\uAC8C\uC18C": ["\uC5B4\uBB35\uC6B0\UB3D9", "\uD638\UB450\uACFC\uC790"],
   "\uCC9C\uC548\uC0BC\uAC70\uB9AC\uD734\uAC8C\uC18C": ["\uD638\UB450\uACFC\uC790", "\uC21C\uB300\uAD6D\uBC25"],
-  "\uADFC\uC721\uD734\uAC8C\uC18C": ["\uC5B4\uBB35\uC6B0\UB3D9", "\uAE40\uBC25"]
+  "\uADFC\uC721\uD734\uAC8C\uC18C": ["\uC5B4\uBB35\uC6B0\UB3D9", "\uAE40\uBC25"],
+  "\uC548\uB3D9\uD734\uAC8C\uC18C": ["\uAC04\uACE0\uB4F1\uC5B4\uC815\uC2DD", "\uCC1C\uB2ED"]
 };
 
 const parseRequestBody = (body: unknown): GenerateRoutesRequest => {
@@ -151,6 +152,15 @@ const samplePointsForStopSearch = (path: Coordinates[], count: number): Coordina
   return points;
 };
 
+const extractGuideRestAreaNames = (route: any): string[] => {
+  const sections = Array.isArray(route?.sections) ? route.sections : [];
+  const guides = sections.flatMap((section: any) => (Array.isArray(section?.guides) ? section.guides : []));
+  const names = guides
+    .map((guide: any) => String(guide?.name || ""))
+    .filter((name: string) => name.includes("\uD734\uAC8C\uC18C"));
+  return Array.from(new Set(names));
+};
+
 const looksLikeHighwayRestArea = (doc: any): boolean => {
   const name = String(doc?.place_name || "");
   const category = String(doc?.category_name || "");
@@ -186,24 +196,52 @@ const mapKakaoPlaceToStop = (doc: any, index: number): RouteStop => {
   };
 };
 
-const fetchRestAreasAlongPath = async (path: Coordinates[], restKey: string): Promise<RouteStop[]> => {
+const fetchPlaceByName = async (name: string, restKey: string, nearPoint?: Coordinates): Promise<RouteStop | null> => {
+  let url = `${KAKAO_KEYWORD_BASE}?query=${encodeURIComponent(name)}&size=10&sort=accuracy`;
+  if (nearPoint) {
+    url =
+      `${KAKAO_KEYWORD_BASE}?query=${encodeURIComponent(name)}` +
+      `&x=${nearPoint.lng}&y=${nearPoint.lat}&radius=20000&size=10&sort=distance`;
+  }
+  const data: any = await fetchJson(url, restKey);
+  const docs = Array.isArray(data?.documents) ? data.documents : [];
+  const match = docs.find((doc: any) => looksLikeHighwayRestArea(doc)) || null;
+  return match ? mapKakaoPlaceToStop(match, 0) : null;
+};
+
+const fetchRestAreasAlongPath = async (
+  path: Coordinates[],
+  restKey: string,
+  preferredNames: string[]
+): Promise<RouteStop[]> => {
   const points = samplePointsForStopSearch(path, 7);
   const dedupe = new Map<string, RouteStop>();
+  const centerPoint = points[Math.floor(points.length / 2)];
+
+  for (const preferredName of preferredNames) {
+    const stop = await fetchPlaceByName(preferredName, restKey, centerPoint);
+    if (!stop) continue;
+    const key = stop.stopId || stop.name;
+    if (!dedupe.has(key)) dedupe.set(key, stop);
+  }
 
   for (const point of points) {
-    const url =
-      `${KAKAO_KEYWORD_BASE}?query=${encodeURIComponent(REST_AREA_QUERY)}` +
-      `&x=${point.lng}&y=${point.lat}&radius=12000&size=8&sort=distance`;
+    for (const query of REST_AREA_QUERIES) {
+      const url =
+        `${KAKAO_KEYWORD_BASE}?query=${encodeURIComponent(query)}` +
+        `&x=${point.lng}&y=${point.lat}&radius=14000&size=10&sort=distance`;
 
-    const data: any = await fetchJson(url, restKey);
-    const docs = Array.isArray(data?.documents) ? data.documents : [];
+      const data: any = await fetchJson(url, restKey);
+      const docs = Array.isArray(data?.documents) ? data.documents : [];
 
-    docs.forEach((doc: any) => {
-      if (!looksLikeHighwayRestArea(doc)) return;
-      const key = String(doc.id || doc.place_name || `${doc.x}_${doc.y}`);
-      if (!dedupe.has(key)) dedupe.set(key, mapKakaoPlaceToStop(doc, dedupe.size));
-    });
+      docs.forEach((doc: any) => {
+        if (!looksLikeHighwayRestArea(doc)) return;
+        const key = String(doc.id || doc.place_name || `${doc.x}_${doc.y}`);
+        if (!dedupe.has(key)) dedupe.set(key, mapKakaoPlaceToStop(doc, dedupe.size));
+      });
 
+      if (dedupe.size >= 10) break;
+    }
     if (dedupe.size >= 10) break;
   }
 
@@ -255,7 +293,8 @@ export default async function handler(req: any, res: any) {
       const rawRoute = routesRaw[i];
       const summary = rawRoute?.summary || {};
       const path = extractPathFromRoute(rawRoute);
-      const stops = await fetchRestAreasAlongPath(path, restKey);
+      const guideRestAreaNames = extractGuideRestAreaNames(rawRoute);
+      const stops = await fetchRestAreasAlongPath(path, restKey, guideRestAreaNames);
       const distanceKm = Math.round((Number(summary.distance || 0) / 1000) * 10) / 10;
       const durationMin = Math.round(Number(summary.duration || 0) / 60);
 
