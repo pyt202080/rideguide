@@ -36,11 +36,36 @@ const StopRow: React.FC<{ stop: Stop; index: number }> = ({ stop, index }) => (
         </div>
         
         <div className="flex flex-wrap gap-1.5 mb-3">
-          {stop.topItems.map((item, i) => (
-            <span key={i} className="text-[11px] font-bold text-neutral-700 bg-neutral-100 px-3 py-1 rounded-full border border-neutral-200">
-              {item}
-            </span>
-          ))}
+          {stop.topItems.map((item, i) => {
+            const isBest = item.startsWith('대표 ');
+            const isRecommend = item.startsWith('추천 ');
+            const menuName = item.replace(/^(대표|추천)\s+/, '');
+
+            const chipClass = isBest
+              ? 'text-amber-800 bg-amber-50 border-amber-200'
+              : isRecommend
+                ? 'text-emerald-800 bg-emerald-50 border-emerald-200'
+                : 'text-neutral-700 bg-neutral-100 border-neutral-200';
+
+            const labelClass = isBest
+              ? 'bg-amber-100 text-amber-700'
+              : isRecommend
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-neutral-200 text-neutral-600';
+
+            const labelText = isBest ? '대표' : isRecommend ? '추천' : null;
+
+            return (
+              <span key={i} className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full border ${chipClass}`}>
+                {labelText && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] leading-none font-black ${labelClass}`}>
+                    {labelText}
+                  </span>
+                )}
+                <span>{menuName}</span>
+              </span>
+            );
+          })}
         </div>
         <p className="text-[13.5px] text-neutral-500 font-medium leading-relaxed line-clamp-2">{stop.description}</p>
       </div>
