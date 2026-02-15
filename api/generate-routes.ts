@@ -1,5 +1,4 @@
-﻿import { GoogleGenAI, Type } from "@google/genai";
-import { StopType, GroundingSource, RouteOption } from "../types";
+import { GoogleGenAI, Type } from "@google/genai";
 
 interface GenerateRoutesRequest {
   start?: string;
@@ -8,21 +7,49 @@ interface GenerateRoutesRequest {
   destCoords?: { lat: number; lng: number };
 }
 
+interface GroundingSource {
+  title: string;
+  uri: string;
+}
+
+interface RouteOption {
+  routeId: string;
+  summary: string;
+  distanceKm: number;
+  durationMin: number;
+  toll: boolean;
+  path: Array<{ lat: number; lng: number }>;
+  stops: Array<{
+    stopId: string;
+    type: "highway_rest_area" | "local_restaurant";
+    name: string;
+    location: { lat: number; lng: number };
+    topItems: string[];
+    description: string;
+    rating: number;
+    imageUrl: string;
+    searchLinks: { naver: string; google: string; kakao: string };
+  }>;
+  sources?: GroundingSource[];
+}
+
+const STOP_TYPES = ["highway_rest_area", "local_restaurant"] as const;
+
 const normalizeOutput = (rawData: any, sources: GroundingSource[]): RouteOption[] => {
   if (!Array.isArray(rawData)) return [];
 
-  return rawData.map((route: any, i: number) => ({
+  return rawData.map((route: any, routeIndex: number) => ({
     ...route,
-    routeId: `route_${Date.now()}_${i}`,
+    routeId: `route_${Date.now()}_${routeIndex}`,
     sources,
-    stops: (route.stops || []).map((stop: any, j: number) => ({
+    stops: (route.stops || []).map((stop: any, stopIndex: number) => ({
       ...stop,
-      stopId: `stop_${Date.now()}_${i}_${j}`,
-      imageUrl: `https://picsum.photos/400/300?restarea&sig=${i}${j}${Date.now()}`,
+      stopId: `stop_${Date.now()}_${routeIndex}_${stopIndex}`,
+      imageUrl: `https://picsum.photos/400/300?restarea&sig=${routeIndex}${stopIndex}${Date.now()}`,
       searchLinks: {
-        naver: `https://map.naver.com/v5/search/${encodeURIComponent(stop.name)}`,
-        google: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stop.name)}`,
-        kakao: `https://map.kakao.com/link/search/${encodeURIComponent(stop.name)}`
+        naver: `https://map.naver.com/v5/search/${encodeURIComponent(stop.name || "")}`,
+        google: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stop.name || "")}`,
+        kakao: `https://map.kakao.com/link/search/${encodeURIComponent(stop.name || "")}`
       }
     }))
   })) as RouteOption[];
@@ -38,6 +65,19 @@ const parseModelJson = (text: string): any => {
   return JSON.parse(rawText.trim());
 };
 
+const parseRequestBody = (body: unknown): GenerateRoutesRequest => {
+  if (!body) return {};
+  if (typeof body === "string") {
+    try {
+      return JSON.parse(body || "{}");
+    } catch {
+      return {};
+    }
+  }
+  if (typeof body === "object") return body as GenerateRoutesRequest;
+  return {};
+};
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -48,8 +88,7 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: "Server API_KEY is not configured" });
   }
 
-  const body: GenerateRoutesRequest =
-    typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+  const body: GenerateRoutesRequest = parseRequestBody(req.body);
   const start = (body.start || "").trim();
   const destination = (body.destination || "").trim();
 
@@ -59,15 +98,15 @@ export default async function handler(req: any, res: any) {
 
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const locationContext = `출발지: "${start}", 목적지: "${destination}" (대한민국 고속도로 경로)`;
+    const locationContext = `Start: "${start}", Destination: "${destination}" (South Korea highway route)`;
 
     const prompt = `${locationContext}
 
-      [필수 작업: 실시간 데이터 위주 조사]
-      1. Google Search Grounding을 사용하여 실제 고속도로 경로와 경로상의 공식 휴게소를 찾으세요.
-      2. 각 휴게소별 대표 메뉴와 리뷰 기반 특징을 간단히 요약하세요.
-      3. 거리(km), 소요시간(분), 경로 요약을 포함하세요.
-      4. 아래 JSON 스키마를 엄격히 준수하세요.
+      Required tasks:
+      1. Use Google Search grounding to find real highway route candidates and official rest areas on the route.
+      2. Summarize signature menu items and review-based features for each stop.
+      3. Include distance (km), duration (minutes), and a route summary.
+      4. Follow the JSON schema strictly. Return only valid JSON.
       `;
 
     const config = {
@@ -99,7 +138,7 @@ export default async function handler(req: any, res: any) {
                 type: Type.OBJECT,
                 properties: {
                   stopId: { type: Type.STRING },
-                  type: { type: Type.STRING, enum: [StopType.HIGHWAY_REST_AREA, StopType.LOCAL_RESTAURANT] },
+                  type: { type: Type.STRING, enum: [...STOP_TYPES] },
                   name: { type: Type.STRING },
                   location: {
                     type: Type.OBJECT,
@@ -127,24 +166,23 @@ export default async function handler(req: any, res: any) {
       try {
         response = await ai.models.generateContent({ model, contents: prompt, config });
         break;
-      } catch (e: any) {
-        lastError = e;
+      } catch (error: any) {
+        lastError = error;
       }
     }
 
     if (!response) {
       try {
-        // Grounding quota가 막힌 경우를 대비해 tools 없이 한 번 더 시도한다.
         response = await ai.models.generateContent({
           model: "gemini-2.5-flash",
-          contents: `${prompt}\n\n[주의] 도구 사용이 불가능하면, 일반 지식 기반 추정값으로 JSON만 정확히 생성하세요.`,
+          contents: `${prompt}\n\nIf tool use is unavailable, return best-effort JSON from general knowledge.`,
           config: {
             responseMimeType: "application/json",
             responseSchema: config.responseSchema
           }
         });
-      } catch (e: any) {
-        lastError = e;
+      } catch (error: any) {
+        lastError = error;
       }
     }
 
@@ -156,7 +194,7 @@ export default async function handler(req: any, res: any) {
     const sources: GroundingSource[] = groundingChunks
       .filter((chunk: any) => chunk.web)
       .map((chunk: any) => ({
-        title: chunk.web.title || "웹 검색 결과",
+        title: chunk.web.title || "Web search result",
         uri: chunk.web.uri
       }));
 
@@ -170,4 +208,3 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: "Failed to generate routes", detail });
   }
 }
-

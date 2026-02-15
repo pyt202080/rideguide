@@ -38,59 +38,52 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
 
   useEffect(() => {
     const initMap = () => {
-      if (!mapContainer.current || !window.kakao || !window.kakao.maps) {
-        return;
-      }
+      if (!mapContainer.current || !window.kakao || !window.kakao.maps) return;
 
       window.kakao.maps.load(() => {
         try {
-          const options = {
+          const map = new window.kakao.maps.Map(mapContainer.current, {
             center: new window.kakao.maps.LatLng(36.5, 127.5),
             level: 12
-          };
-          const map = new window.kakao.maps.Map(mapContainer.current, options);
-          mapInstance.current = map;
+          });
 
+          mapInstance.current = map;
           window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
-            if (onMapClick) {
-              const latlng = mouseEvent.latLng;
-              onMapClick({ lat: latlng.getLat(), lng: latlng.getLng() });
-            }
+            if (!onMapClick) return;
+            const latlng = mouseEvent.latLng;
+            onMapClick({ lat: latlng.getLat(), lng: latlng.getLng() });
           });
 
           setIsApiLoaded(true);
           setHasMapError(false);
-        } catch (err) {
-          console.error("Kakao Map initialization failed:", err);
+        } catch (error) {
+          console.error("Kakao Map initialization failed:", error);
           setHasMapError(true);
         }
       });
     };
 
-    if (selectionMode) {
-      setHasMapError(false);
-    }
-
+    if (selectionMode) setHasMapError(false);
     if (mapInstance.current) return;
 
     if (typeof window.kakao !== 'undefined' && window.kakao.maps) {
       initMap();
     } else if (retryCount < 20) {
-      const timer = setTimeout(() => setRetryCount(prev => prev + 1), 500);
+      const timer = setTimeout(() => setRetryCount((prev) => prev + 1), 500);
       return () => clearTimeout(timer);
     } else {
       setHasMapError(true);
     }
-  }, [retryCount, onMapClick, hasMapError, selectionMode]);
+  }, [retryCount, onMapClick, selectionMode]);
 
   useEffect(() => {
     if (!isApiLoaded || !mapInstance.current) return;
+
     const map = mapInstance.current;
     const kakao = window.kakao;
 
-    // Clear existing elements
-    markers.current.forEach(m => m.setMap(null));
-    overlays.current.forEach(o => o.setMap(null));
+    markers.current.forEach((marker) => marker.setMap(null));
+    overlays.current.forEach((overlay) => overlay.setMap(null));
     if (polyline.current) polyline.current.setMap(null);
     markers.current = [];
     overlays.current = [];
@@ -99,52 +92,53 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
     let hasPoints = false;
 
     if (route?.path?.length) {
-      const linePath = route.path.map(p => new kakao.maps.LatLng(p.lat, p.lng));
+      const linePath = route.path.map((point) => new kakao.maps.LatLng(point.lat, point.lng));
       polyline.current = new kakao.maps.Polyline({
-        path: linePath, strokeWeight: 6, strokeColor: '#FF5C00', strokeOpacity: 0.8
+        path: linePath,
+        strokeWeight: 6,
+        strokeColor: '#FF5C00',
+        strokeOpacity: 0.8
       });
       polyline.current.setMap(map);
-      linePath.forEach(p => bounds.extend(p));
+      linePath.forEach((point) => bounds.extend(point));
       hasPoints = true;
     }
 
     if (stops) {
-      stops.forEach(stop => {
-        const pos = new kakao.maps.LatLng(stop.location.lat, stop.location.lng);
-        const marker = new kakao.maps.Marker({ position: pos, map: map });
+      stops.forEach((stop) => {
+        const position = new kakao.maps.LatLng(stop.location.lat, stop.location.lng);
+        const marker = new kakao.maps.Marker({ position, map });
         const isSelected = stop.stopId === selectedStopId;
         const overlay = new kakao.maps.CustomOverlay({
-          position: pos,
+          position,
           content: `<div class="kakao-label ${isSelected ? 'selected animate-bounce' : ''}">${stop.name}</div>`,
           yAnchor: 2.3
         });
         overlay.setMap(map);
         markers.current.push(marker);
         overlays.current.push(overlay);
-        bounds.extend(pos);
+        bounds.extend(position);
         hasPoints = true;
       });
     }
 
     if (startPoint) {
-        const pos = new kakao.maps.LatLng(startPoint.lat, startPoint.lng);
-        const marker = new kakao.maps.Marker({ position: pos, map: map });
-        markers.current.push(marker);
-        bounds.extend(pos);
-        hasPoints = true;
+      const position = new kakao.maps.LatLng(startPoint.lat, startPoint.lng);
+      const marker = new kakao.maps.Marker({ position, map });
+      markers.current.push(marker);
+      bounds.extend(position);
+      hasPoints = true;
     }
+
     if (endPoint) {
-        const pos = new kakao.maps.LatLng(endPoint.lat, endPoint.lng);
-        const marker = new kakao.maps.Marker({ position: pos, map: map });
-        markers.current.push(marker);
-        bounds.extend(pos);
-        hasPoints = true;
+      const position = new kakao.maps.LatLng(endPoint.lat, endPoint.lng);
+      const marker = new kakao.maps.Marker({ position, map });
+      markers.current.push(marker);
+      bounds.extend(position);
+      hasPoints = true;
     }
 
-    if (hasPoints) {
-      map.setBounds(bounds);
-    }
-
+    if (hasPoints) map.setBounds(bounds);
     setTimeout(() => map.relayout(), 100);
   }, [isApiLoaded, route, stops, selectedStopId, startPoint, endPoint]);
 
@@ -162,21 +156,22 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
     return (
       <div className="w-full h-full bg-neutral-100 flex items-center justify-center p-8 text-center">
         <div className="max-w-md bg-white p-10 rounded-[40px] shadow-premium border border-black/[0.03]">
-            <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                <AlertCircle className="w-8 h-8" />
-            </div>
-            <h3 className="text-xl font-black text-neutral-900 mb-3 tracking-tight">지도를 불러오지 못했습니다</h3>
-            <div className="text-neutral-500 text-sm mb-6 leading-relaxed break-keep font-medium">
-              카카오맵 SDK 로딩이 실패했습니다. 네트워크 제한, 광고 차단기, CSP 설정, 지도 앱키 또는 스크립트 로드 환경을 확인해 주세요.<br/>
-              <span className="text-primary font-bold">좌표 입력 기반 검색은 정상 동작합니다.</span>
-            </div>
-            <button
-              type="button"
-              onClick={retryMapLoad}
-              className="px-6 py-3 bg-primary text-white rounded-2xl font-black text-sm shadow-lg shadow-primary/20 hover:bg-primary-dark transition-all"
-            >
-              지도 재시도
-            </button>
+          <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h3 className="text-xl font-black text-neutral-900 mb-3 tracking-tight">지도를 불러오지 못했습니다</h3>
+          <div className="text-neutral-500 text-sm mb-6 leading-relaxed break-keep font-medium">
+            카카오맵 SDK 로딩이 실패했습니다. 네트워크 제한, 광고 차단기, CSP 설정, 지도 앱키 또는 스크립트 로드 환경을 확인해 주세요.
+            <br />
+            <span className="text-primary font-bold">좌표 입력 기반 검색은 정상 동작합니다.</span>
+          </div>
+          <button
+            type="button"
+            onClick={retryMapLoad}
+            className="px-6 py-3 bg-primary text-white rounded-2xl font-black text-sm shadow-lg shadow-primary/20 hover:bg-primary-dark transition-all"
+          >
+            지도 재시도
+          </button>
         </div>
       </div>
     );
