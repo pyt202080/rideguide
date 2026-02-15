@@ -9,10 +9,10 @@ interface Step2Props {
 }
 
 const LOADING_MESSAGES = [
-  "구글 검색을 통해 실시간 고속도로 정보를 수집 중입니다",
-  "경로상 모든 휴게소와 현재 인기 메뉴를 대조하고 있습니다",
-  "실제 여행자들의 최신 리뷰와 평점을 분석 중입니다",
-  "누락된 휴게소가 없는지 전수 조사를 진행하고 있습니다"
+  "카카오 길찾기 API로 경로를 계산하고 있습니다",
+  "경로 주변 휴게소를 카카오 로컬 검색으로 수집 중입니다",
+  "이동 거리와 예상 소요 시간을 정리하고 있습니다",
+  "경로 데이터를 화면에 맞게 최적화하고 있습니다"
 ];
 
 const StopRow: React.FC<{ stop: Stop; index: number }> = ({ stop, index }) => (
@@ -119,7 +119,7 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
         </div>
         <h3 className="text-2xl font-black text-neutral-900 mb-3 tracking-tight">{LOADING_MESSAGES[msgIndex]}</h3>
         <p className="text-[15px] text-neutral-400 font-bold max-w-sm text-center break-keep leading-relaxed px-6">
-          실시간 웹 검색을 결합하여<br/>"{formatName(searchData.start)} → {formatName(searchData.destination)}" 경로의 최신 시설 정보를 수집하고 있습니다.
+          카카오 지도 데이터를 기반으로<br/>"{formatName(searchData.start)} → {formatName(searchData.destination)}" 경로를 계산하고 있습니다.
         </p>
       </div>
     );
@@ -140,7 +140,7 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
         </p>
         {isApiError && (
           <p className="text-[12px] text-neutral-400 text-center mb-8 max-w-xs leading-relaxed">
-            점검 필요: `API_KEY` 노출 여부, 서버 라우트(`/api/generate-routes`) 배포 상태, Vercel Function 로그를 확인해 주세요.
+            점검 필요: `KAKAO_REST_API_KEY` 설정, 서버 라우트(`/api/generate-routes`) 배포 상태, Vercel Function 로그를 확인해 주세요.
           </p>
         )}
         <div className="flex gap-3">
@@ -194,7 +194,7 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
               </h2>
               <div className="flex items-center gap-1.5 text-neutral-400 font-bold text-[12px]">
                 <Sparkles className="w-3.5 h-3.5 text-primary" />
-                <span>실시간 고속도로 정보 수집 완료</span>
+                <span>카카오 지도 경로 계산 완료</span>
               </div>
             </div>
             
@@ -314,7 +314,7 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
           <div className="mt-10 flex flex-col items-center gap-1.5 opacity-50">
             <div className="w-10 h-1 bg-neutral-200 rounded-full mb-1"></div>
             <p className="text-center text-[11px] font-bold text-neutral-400 max-w-sm break-keep leading-relaxed">
-              본 정보는 구글 실시간 검색을 통해 자동 생성되었습니다. 실제 상황은 차이가 있을 수 있습니다.
+              본 정보는 카카오 지도/로컬 API 기반으로 생성되었습니다. 실제 상황은 차이가 있을 수 있습니다.
             </p>
           </div>
         </div>

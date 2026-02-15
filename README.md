@@ -14,7 +14,7 @@
 3. `main` 브랜치 배포 후 `https://<project>.vercel.app`에서 확인합니다.
 
 ## 환경변수
-- `API_KEY`: Google AI Studio에서 발급한 Gemini API 키
+- `KAKAO_REST_API_KEY`: Kakao Developers에서 발급한 REST API 키
 
 ## 기술 스택
 - Frontend: React + Vite + TailwindCSS
