@@ -375,16 +375,31 @@ const buildIndexes = (
   restRows: ExpresswayRestRow[],
   popularRows: PopularMenuRow[]
 ) => {
-  const foodByRest = new Map<string, { scoreByFood: Map<string, number>; description: string }>();
+  const foodByRest = new Map<
+    string,
+    {
+      scoreByFood: Map<string, number>;
+      bestFoods: Set<string>;
+      recommendFoods: Set<string>;
+      description: string;
+    }
+  >();
   foodRows.forEach((row) => {
     const norm = normalizeRestName(String(row.stdRestNm || ""));
     if (!norm) return;
-    const current = foodByRest.get(norm) || { scoreByFood: new Map<string, number>(), description: "" };
+    const current = foodByRest.get(norm) || {
+      scoreByFood: new Map<string, number>(),
+      bestFoods: new Set<string>(),
+      recommendFoods: new Set<string>(),
+      description: ""
+    };
     const foodName = String(row.foodNm || "").trim();
     if (foodName) {
       const score = foodRowScore(row);
       const prev = current.scoreByFood.get(foodName) ?? Number.NEGATIVE_INFINITY;
       current.scoreByFood.set(foodName, Math.max(prev, score));
+      if (String(row.bestfoodyn || "").toUpperCase() === "Y") current.bestFoods.add(foodName);
+      if (String(row.recommendyn || "").toUpperCase() === "Y") current.recommendFoods.add(foodName);
     }
     if (!current.description && row.etc) current.description = String(row.etc).trim();
     foodByRest.set(norm, current);
@@ -396,18 +411,38 @@ const buildIndexes = (
     if (!restKey || !item) return;
     const rankNum = Number(row.rank || 99);
     const bonus = Math.max(0, 10 - Math.min(rankNum, 10)) * 20;
-    const current = foodByRest.get(restKey) || { scoreByFood: new Map<string, number>(), description: "" };
+    const current = foodByRest.get(restKey) || {
+      scoreByFood: new Map<string, number>(),
+      bestFoods: new Set<string>(),
+      recommendFoods: new Set<string>(),
+      description: ""
+    };
     const prev = current.scoreByFood.get(item) ?? Number.NEGATIVE_INFINITY;
     current.scoreByFood.set(item, Math.max(prev, 120 + bonus));
+    current.recommendFoods.add(item);
     foodByRest.set(restKey, current);
   });
 
   const rankedFoodByRest = new Map<string, FoodMeta>();
   foodByRest.forEach((value, key) => {
-    const foods = Array.from(value.scoreByFood.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map((x) => x[0])
-      .slice(0, 5);
+    const sorter = (a: string, b: string) =>
+      (value.scoreByFood.get(b) || 0) - (value.scoreByFood.get(a) || 0);
+
+    const best = Array.from(value.bestFoods).sort(sorter);
+    const recommend = Array.from(value.recommendFoods)
+      .filter((name) => !value.bestFoods.has(name))
+      .sort(sorter);
+    const others = Array.from(value.scoreByFood.keys())
+      .filter((name) => !value.bestFoods.has(name) && !value.recommendFoods.has(name))
+      .sort(sorter);
+
+    const foods: string[] = [];
+    if (best.length > 0) foods.push(`대표 ${best[0]}`);
+    if (recommend.length > 0) foods.push(`추천 ${recommend[0]}`);
+    if (foods.length < 3 && best.length > 1) foods.push(`대표 ${best[1]}`);
+    if (foods.length < 3 && recommend.length > 1) foods.push(`추천 ${recommend[1]}`);
+    while (foods.length < 3 && others.length > 0) foods.push(others.shift() as string);
+
     rankedFoodByRest.set(key, {
       foods,
       description: value.description
