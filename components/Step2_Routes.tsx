@@ -71,7 +71,6 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
   const [loading, setLoading] = useState(true);
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [msgIndex, setMsgIndex] = useState(0);
-  const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [visibleStopsCount, setVisibleStopsCount] = useState(STOPS_PAGE_SIZE);
 
@@ -87,8 +86,6 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
     try {
       const data = await generateRoutes(searchData.start, searchData.destination, searchData.startCoordinates, searchData.destinationCoordinates);
       setRoutes(data);
-      if (data.length > 0) setActiveRouteId(data[0].routeId);
-      else setActiveRouteId(null);
     } catch (err) {
       console.error(err);
       const msg = err instanceof Error ? err.message : "경로를 불러오는 중 오류가 발생했습니다.";
@@ -105,9 +102,9 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
 
   useEffect(() => {
     setVisibleStopsCount(STOPS_PAGE_SIZE);
-  }, [activeRouteId]);
+  }, [routes]);
 
-  const activeRoute = routes.find(r => r.routeId === activeRouteId);
+  const activeRoute = routes[0];
   const displayedStops = (activeRoute?.stops || []).slice(0, visibleStopsCount);
   const hasMoreStops = (activeRoute?.stops.length || 0) > visibleStopsCount;
   const formatName = (name: string) => name.split('(')[0].split(',')[0].trim();
@@ -225,27 +222,7 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
         </div>
       </div>
 
-      {/* 3. 경로 선택 탭 (스크롤 시 최상단 고정 - 공간 확보의 핵심) */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-black/[0.05] shadow-sm">
-        <div className="max-w-5xl mx-auto px-6 flex items-center gap-2 overflow-x-auto no-scrollbar py-2.5">
-          {routes.map((route) => (
-            <button
-              key={route.routeId}
-              onClick={() => setActiveRouteId(route.routeId)}
-              className={`px-4 py-2 text-[12px] font-black whitespace-nowrap rounded-lg transition-all flex items-center gap-1.5 border ${
-                activeRouteId === route.routeId 
-                  ? 'bg-neutral-900 text-white border-neutral-900 shadow-md' 
-                  : 'bg-white text-neutral-400 border-neutral-100 hover:border-neutral-200 hover:text-neutral-600'
-              }`}
-            >
-              {activeRouteId === route.routeId && <Sparkles className="w-3 h-3 text-primary" />}
-              {route.summary.split('(')[0]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 4. 본문 목록 (컨텐츠 공간 최대화) */}
+      {/* 3. 본문 목록 */}
       <div className="flex-none pt-6 pb-20">
         <div className="max-w-5xl mx-auto px-6">
           <div className="flex justify-center md:justify-start mb-6">

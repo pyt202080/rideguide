@@ -564,8 +564,19 @@ const fetchRestAreasAlongPath = async (
     }
   }
 
-  const chosen = strict.size >= 2 ? strict : new Map<string, CandidateStop>([...strict, ...relaxed]);
-  return Array.from(chosen.values())
+  const merged = new Map<string, CandidateStop>(relaxed);
+  strict.forEach((value, key) => {
+    const prev = merged.get(key);
+    if (
+      !prev ||
+      value.distanceToPath < prev.distanceToPath ||
+      (value.distanceToPath === prev.distanceToPath && value.order < prev.order)
+    ) {
+      merged.set(key, value);
+    }
+  });
+
+  return Array.from(merged.values())
     .sort((a, b) => a.order - b.order)
     .map((entry) => entry.stop);
 };
@@ -621,46 +632,87 @@ export default async function handler(req: any, res: any) {
     }
     const { foodByRest, restMetaByName } = buildIndexes(foodRows, restRows);
 
-    const routes: RouteOption[] = [];
-    for (let i = 0; i < routeCandidates.length; i++) {
-      const { route: rawRoute, priority } = routeCandidates[i];
-      const summary = rawRoute?.summary || {};
-      const path = extractPathFromRoute(rawRoute);
-      const routeHints = extractRouteHints(rawRoute);
-      const stops = await fetchRestAreasAlongPath(path, routeHints, kakaoRestKey, foodByRest, restMetaByName);
-      const distanceKm = Math.round((Number(summary.distance || 0) / 1000) * 10) / 10;
-      const durationMin = Math.round(Number(summary.duration || 0) / 60);
+    const evaluated = await Promise.all(
+      routeCandidates.map(async ({ route: rawRoute, priority }) => {
+        const summary = rawRoute?.summary || {};
+        const path = extractPathFromRoute(rawRoute);
+        const routeHints = extractRouteHints(rawRoute);
+        const stops = await fetchRestAreasAlongPath(path, routeHints, kakaoRestKey, foodByRest, restMetaByName);
+        const distanceKm = Math.round((Number(summary.distance || 0) / 1000) * 10) / 10;
+        const durationMin = Math.round(Number(summary.duration || 0) / 60);
+        return {
+          priority,
+          path,
+          stops,
+          distanceKm,
+          durationMin,
+          toll: Number(summary?.fare?.toll || 0) > 0
+        };
+      })
+    );
 
-      routes.push({
-        routeId: `kakao_route_${Date.now()}_${i}`,
-        summary: toRouteSummary(i, priority, distanceKm, durationMin),
-        distanceKm,
-        durationMin,
-        toll: Number(summary?.fare?.toll || 0) > 0,
-        path,
-        stops,
-        sources: [
-          {
-            title: "Kakao Mobility Directions API",
-            uri: "https://developers.kakaomobility.com/docs/navi-api/directions/"
-          },
-          {
-            title: "Kakao Local Search API",
-            uri: "https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword"
-          },
-          {
-            title: "한국도로공사 휴게소 정보 API (0317)",
-            uri: "https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0317&serviceType=OPENAPI"
-          },
-          {
-            title: "한국도로공사 대표메뉴 API (0502)",
-            uri: "https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0502&serviceType=OPENAPI"
-          }
-        ]
+    const primary =
+      evaluated.find((r) => r.priority === "RECOMMEND") ||
+      evaluated.slice().sort((a, b) => a.durationMin - b.durationMin)[0];
+    const primaryPath = primary?.path || [];
+
+    const unified = new Map<
+      string,
+      { stop: RouteStop; order: number; distanceToPath: number }
+    >();
+
+    evaluated.forEach((route) => {
+      route.stops.forEach((stop) => {
+        const key = normalizeRestName(stop.name);
+        if (!key) return;
+        const point = nearestPathPoint(stop.location, primaryPath.length > 0 ? primaryPath : route.path);
+        const candidate = { stop, order: point.index, distanceToPath: point.distanceToPath };
+        const prev = unified.get(key);
+        if (
+          !prev ||
+          candidate.distanceToPath < prev.distanceToPath ||
+          (candidate.distanceToPath === prev.distanceToPath && candidate.order < prev.order)
+        ) {
+          unified.set(key, candidate);
+        }
       });
-    }
+    });
 
-    return res.status(200).json({ routes });
+    const unifiedStops = Array.from(unified.values())
+      .sort((a, b) => a.order - b.order)
+      .map((entry) => entry.stop);
+
+    const route: RouteOption = {
+      routeId: `kakao_unified_${Date.now()}`,
+      summary: `전체 이동 구간 휴게소 · ${primary?.distanceKm ?? 0}km · ${Math.floor(
+        (primary?.durationMin ?? 0) / 60
+      )}h ${(primary?.durationMin ?? 0) % 60}m`,
+      distanceKm: primary?.distanceKm ?? 0,
+      durationMin: primary?.durationMin ?? 0,
+      toll: Boolean(primary?.toll),
+      path: primaryPath,
+      stops: unifiedStops,
+      sources: [
+        {
+          title: "Kakao Mobility Directions API",
+          uri: "https://developers.kakaomobility.com/docs/navi-api/directions/"
+        },
+        {
+          title: "Kakao Local Search API",
+          uri: "https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword"
+        },
+        {
+          title: "한국도로공사 휴게소 정보 API (0317)",
+          uri: "https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0317&serviceType=OPENAPI"
+        },
+        {
+          title: "한국도로공사 대표메뉴 API (0502)",
+          uri: "https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0502&serviceType=OPENAPI"
+        }
+      ]
+    };
+
+    return res.status(200).json({ routes: [route] });
   } catch (error) {
     console.error("Kakao route generation failed:", error);
     const detail = error instanceof Error ? error.message : String(error);
