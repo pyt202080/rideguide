@@ -381,7 +381,8 @@ const buildIndexes = (
       scoreByFood: Map<string, number>;
       bestFoods: Set<string>;
       recommendFoods: Set<string>;
-      description: string;
+      descriptionByFood: Map<string, string>;
+      fallbackDescription: string;
     }
   >();
   foodRows.forEach((row) => {
@@ -391,7 +392,8 @@ const buildIndexes = (
       scoreByFood: new Map<string, number>(),
       bestFoods: new Set<string>(),
       recommendFoods: new Set<string>(),
-      description: ""
+      descriptionByFood: new Map<string, string>(),
+      fallbackDescription: ""
     };
     const foodName = String(row.foodNm || "").trim();
     if (foodName) {
@@ -400,8 +402,12 @@ const buildIndexes = (
       current.scoreByFood.set(foodName, Math.max(prev, score));
       if (String(row.bestfoodyn || "").toUpperCase() === "Y") current.bestFoods.add(foodName);
       if (String(row.recommendyn || "").toUpperCase() === "Y") current.recommendFoods.add(foodName);
+      const etc = String(row.etc || "").trim();
+      if (etc && !current.descriptionByFood.has(foodName)) {
+        current.descriptionByFood.set(foodName, etc);
+      }
     }
-    if (!current.description && row.etc) current.description = String(row.etc).trim();
+    if (!current.fallbackDescription && row.etc) current.fallbackDescription = String(row.etc).trim();
     foodByRest.set(norm, current);
   });
 
@@ -415,7 +421,8 @@ const buildIndexes = (
       scoreByFood: new Map<string, number>(),
       bestFoods: new Set<string>(),
       recommendFoods: new Set<string>(),
-      description: ""
+      descriptionByFood: new Map<string, string>(),
+      fallbackDescription: ""
     };
     const prev = current.scoreByFood.get(item) ?? Number.NEGATIVE_INFINITY;
     current.scoreByFood.set(item, Math.max(prev, 120 + bonus));
@@ -432,20 +439,41 @@ const buildIndexes = (
     const recommend = Array.from(value.recommendFoods)
       .filter((name) => !value.bestFoods.has(name))
       .sort(sorter);
-    const others = Array.from(value.scoreByFood.keys())
+    const othersByScore = Array.from(value.scoreByFood.keys())
       .filter((name) => !value.bestFoods.has(name) && !value.recommendFoods.has(name))
       .sort(sorter);
 
-    const foods: string[] = [];
-    if (best.length > 0) foods.push(`대표 ${best[0]}`);
-    if (recommend.length > 0) foods.push(`추천 ${recommend[0]}`);
-    if (foods.length < 3 && best.length > 1) foods.push(`대표 ${best[1]}`);
-    if (foods.length < 3 && recommend.length > 1) foods.push(`추천 ${recommend[1]}`);
-    while (foods.length < 3 && others.length > 0) foods.push(others.shift() as string);
+    const selected: Array<{ name: string }> = [];
+    const used = new Set<string>();
+
+    if (best.length > 0) {
+      selected.push({ name: best[0] });
+      used.add(best[0]);
+    }
+    if (recommend.length > 0) {
+      selected.push({ name: recommend[0] });
+      used.add(recommend[0]);
+    }
+
+    const fallbackPool = [
+      ...best.filter((name) => !used.has(name)),
+      ...recommend.filter((name) => !used.has(name)),
+      ...othersByScore.filter((name) => !used.has(name))
+    ];
+    while (selected.length < 3 && fallbackPool.length > 0) {
+      const name = fallbackPool.shift() as string;
+      if (used.has(name)) continue;
+      selected.push({ name });
+      used.add(name);
+    }
+
+    const foods = selected.map((x) => x.name);
+    const descCandidateName = selected[0]?.name || selected[1]?.name || selected[2]?.name || "";
+    const description = value.descriptionByFood.get(descCandidateName) || value.fallbackDescription;
 
     rankedFoodByRest.set(key, {
       foods,
-      description: value.description
+      description
     });
   });
 
