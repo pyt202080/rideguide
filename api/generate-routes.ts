@@ -1,4 +1,7 @@
-﻿interface GenerateRoutesRequest {
+﻿import fs from "node:fs";
+import path from "node:path";
+
+interface GenerateRoutesRequest {
   start?: string;
   destination?: string;
   startCoords?: { lat: number; lng: number };
@@ -56,6 +59,14 @@ interface ExpresswayRestRow {
   svarGsstClssNm?: string;
 }
 
+interface LocalRestIndexFile {
+  generatedAt?: string;
+  restRows?: ExpresswayRestRow[];
+  foodRows?: ExpresswayFoodRow[];
+  restAreas?: ExpresswayRestRow[];
+  foods?: ExpresswayFoodRow[];
+}
+
 interface OfficialRestMeta {
   displayName: string;
   routeNames: Set<string>;
@@ -82,6 +93,11 @@ const KAKAO_KEYWORD_BASE = "https://dapi.kakao.com/v2/local/search/keyword.json"
 const KAKAO_ADDRESS_BASE = "https://dapi.kakao.com/v2/local/search/address.json";
 const EX_BEST_FOOD_URL = "https://data.ex.co.kr/openapi/restinfo/restBestfoodList";
 const EX_REST_INFO_URL = "https://data.ex.co.kr/openapi/restinfo/hiwaySvarInfoList";
+const LOCAL_REST_INDEX_PATH = path.join(process.cwd(), "data", "rest-index.json");
+const LOCAL_REST_INDEX_CACHE_TTL_MS = 5 * 60 * 1000;
+let localRestIndexCache:
+  | { loadedAt: number; data: { foodRows: ExpresswayFoodRow[]; restRows: ExpresswayRestRow[] } }
+  | null = null;
 
 const REST_AREA_QUERIES = ["휴게소", "고속도로 휴게소"];
 const PRIORITIES: Array<"RECOMMEND" | "TIME" | "DISTANCE"> = ["RECOMMEND", "TIME", "DISTANCE"];
@@ -127,6 +143,38 @@ const fetchJson = async (url: string, headers?: Record<string, string>) => {
     throw new Error(`API error (${response.status}): ${detail}`);
   }
   return response.json();
+};
+
+const loadLocalRestIndex = (): { foodRows: ExpresswayFoodRow[]; restRows: ExpresswayRestRow[] } | null => {
+  const now = Date.now();
+  if (localRestIndexCache && now - localRestIndexCache.loadedAt < LOCAL_REST_INDEX_CACHE_TTL_MS) {
+    return localRestIndexCache.data;
+  }
+
+  try {
+    if (!fs.existsSync(LOCAL_REST_INDEX_PATH)) return null;
+    const raw = fs.readFileSync(LOCAL_REST_INDEX_PATH, "utf8");
+    const parsed = JSON.parse(raw) as LocalRestIndexFile;
+    const restRows = Array.isArray(parsed.restRows)
+      ? parsed.restRows
+      : Array.isArray(parsed.restAreas)
+        ? parsed.restAreas
+        : [];
+    const foodRows = Array.isArray(parsed.foodRows)
+      ? parsed.foodRows
+      : Array.isArray(parsed.foods)
+        ? parsed.foods
+        : [];
+
+    if (restRows.length === 0 && foodRows.length === 0) return null;
+
+    const data = { restRows, foodRows };
+    localRestIndexCache = { loadedAt: now, data };
+    return data;
+  } catch (error) {
+    console.error("Failed to load local rest index:", error);
+    return null;
+  }
 };
 
 const toCoordinates = (x: string | number, y: string | number): Coordinates => ({
@@ -257,16 +305,6 @@ const nearestPathPoint = (
   return { index: bestIdx, distanceToPath: bestDistance };
 };
 
-const fetchExpresswayFoods = async (apiKey: string): Promise<ExpresswayFoodRow[]> => {
-  const rows = await fetchExpresswayPaged<ExpresswayFoodRow>(EX_BEST_FOOD_URL, apiKey);
-  return rows;
-};
-
-const fetchExpresswayRestAreas = async (apiKey: string): Promise<ExpresswayRestRow[]> => {
-  const rows = await fetchExpresswayPaged<ExpresswayRestRow>(EX_REST_INFO_URL, apiKey);
-  return rows;
-};
-
 const fetchExpresswayPaged = async <T>(baseUrl: string, apiKey: string): Promise<T[]> => {
   const pageSize = 500;
   const maxPages = 30;
@@ -289,6 +327,14 @@ const fetchExpresswayPaged = async <T>(baseUrl: string, apiKey: string): Promise
   const fallbackUrl = `${baseUrl}?key=${encodeURIComponent(apiKey)}&type=json`;
   const fallback: any = await fetchJson(fallbackUrl);
   return Array.isArray(fallback?.list) ? (fallback.list as T[]) : [];
+};
+
+const fetchExpresswayFoods = async (apiKey: string): Promise<ExpresswayFoodRow[]> => {
+  return fetchExpresswayPaged<ExpresswayFoodRow>(EX_BEST_FOOD_URL, apiKey);
+};
+
+const fetchExpresswayRestAreas = async (apiKey: string): Promise<ExpresswayRestRow[]> => {
+  return fetchExpresswayPaged<ExpresswayRestRow>(EX_REST_INFO_URL, apiKey);
 };
 
 const buildIndexes = (foodRows: ExpresswayFoodRow[], restRows: ExpresswayRestRow[]) => {
@@ -345,11 +391,7 @@ const findFoodMeta = (
   placeName: string,
   foodByRest: Map<string, FoodMeta>
 ): FoodMeta | undefined => {
-  const keys = [
-    officialKey,
-    normalizeRestName(officialName),
-    normalizeRestName(placeName)
-  ].filter(Boolean);
+  const keys = [officialKey, normalizeRestName(officialName), normalizeRestName(placeName)].filter(Boolean);
 
   for (const key of keys) {
     const exact = foodByRest.get(key);
@@ -389,12 +431,7 @@ const buildStop = (
   indexSeed: number,
   foodByRest: Map<string, FoodMeta>
 ): RouteStop => {
-  const menuInfo = findFoodMeta(
-    officialKey,
-    officialName,
-    String(doc.place_name || ""),
-    foodByRest
-  );
+  const menuInfo = findFoodMeta(officialKey, officialName, String(doc.place_name || ""), foodByRest);
   const menuList = menuInfo?.foods.slice(0, 3) || [];
   const description =
     menuInfo?.description ||
@@ -568,12 +605,20 @@ export default async function handler(req: any, res: any) {
     const routeCandidates = await fetchRouteCandidates(origin, target, kakaoRestKey);
     if (routeCandidates.length === 0) return res.status(200).json({ routes: [] });
 
-    const exApiKey =
-      (process.env.EXPRESSWAY_API_KEY || process.env.KOREA_EXPRESSWAY_API_KEY || "test").trim();
-    const [foodRows, restRows] = await Promise.all([
-      fetchExpresswayFoods(exApiKey),
-      fetchExpresswayRestAreas(exApiKey)
-    ]);
+    let foodRows: ExpresswayFoodRow[] = [];
+    let restRows: ExpresswayRestRow[] = [];
+    const localIndex = loadLocalRestIndex();
+    if (localIndex) {
+      foodRows = localIndex.foodRows;
+      restRows = localIndex.restRows;
+    } else {
+      const exApiKey =
+        (process.env.EXPRESSWAY_API_KEY || process.env.KOREA_EXPRESSWAY_API_KEY || "test").trim();
+      [foodRows, restRows] = await Promise.all([
+        fetchExpresswayFoods(exApiKey),
+        fetchExpresswayRestAreas(exApiKey)
+      ]);
+    }
     const { foodByRest, restMetaByName } = buildIndexes(foodRows, restRows);
 
     const routes: RouteOption[] = [];
