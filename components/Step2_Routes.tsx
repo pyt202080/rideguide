@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { RouteOption, SearchState, Stop } from '../types';
 import { Clock, Navigation, Sparkles, Star, ArrowLeft, MapPin, ChevronRight, Info, ExternalLink, AlertCircle, RefreshCcw } from 'lucide-react';
 import { generateRoutes } from '../services/genai';
@@ -75,6 +75,7 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [msgIndex, setMsgIndex] = useState(0);
   const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let msgInterval: ReturnType<typeof setInterval>;
@@ -84,13 +85,16 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
 
   const fetchRoutes = async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
       const data = await generateRoutes(searchData.start, searchData.destination, searchData.startCoordinates, searchData.destinationCoordinates);
       setRoutes(data);
       if (data.length > 0) setActiveRouteId(data[0].routeId);
       else setActiveRouteId(null);
-    } catch (err) { 
+    } catch (err) {
       console.error(err);
+      const msg = err instanceof Error ? err.message : "경로를 불러오는 중 오류가 발생했습니다.";
+      setErrorMessage(msg);
       setRoutes([]);
     } finally { 
       setLoading(false); 
@@ -103,7 +107,6 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
 
   const activeRoute = routes.find(r => r.routeId === activeRouteId);
   const formatName = (name: string) => name.split('(')[0].split(',')[0].trim();
-  const isAIActive = !!process.env.API_KEY;
 
   if (loading) {
     return (
@@ -123,15 +126,23 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
   }
 
   if (routes.length === 0) {
+    const isApiError = Boolean(errorMessage);
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 bg-neutral-50 animate-fade-in-up">
         <div className="w-20 h-20 bg-neutral-100 rounded-full flex items-center justify-center mb-6">
-          <AlertCircle className="w-10 h-10 text-neutral-400" />
+          <AlertCircle className={`w-10 h-10 ${isApiError ? 'text-amber-500' : 'text-neutral-400'}`} />
         </div>
         <h3 className="text-xl font-black text-neutral-900 mb-2 tracking-tight">검색 결과를 찾지 못했습니다</h3>
         <p className="text-sm text-neutral-500 font-medium mb-8 text-center break-keep max-w-xs">
-          실시간 정보를 불러오는 중에 문제가 발생했거나 해당 경로의 데이터가 충분하지 않습니다.
+          {isApiError
+            ? `오류: ${errorMessage}`
+            : "현재 조건에서 검색 가능한 경로 데이터가 없습니다. 입력지를 다시 확인해 주세요."}
         </p>
+        {isApiError && (
+          <p className="text-[12px] text-neutral-400 text-center mb-8 max-w-xs leading-relaxed">
+            점검 필요: `API_KEY` 노출 여부, 서버 라우트(`/api/generate-routes`) 배포 상태, Vercel Function 로그를 확인해 주세요.
+          </p>
+        )}
         <div className="flex gap-3">
           <button onClick={onBack} className="px-6 py-3 bg-white border border-neutral-200 rounded-2xl font-black text-sm text-neutral-600 hover:bg-neutral-100 transition-all">
             이전으로
@@ -153,10 +164,6 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
                 <span className="font-black text-sm">뭐</span>
             </div>
             <span className="font-black text-base tracking-tight text-neutral-900 underline decoration-primary/30 underline-offset-4 decoration-2">뭐 <span className="text-primary">무까?</span></span>
-        </div>
-        <div className={`text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1.5 border ${isAIActive ? 'bg-orange-50 border-orange-100 text-primary' : 'bg-neutral-100 border-neutral-200 text-neutral-400'}`}>
-            <div className={`w-1 h-1 rounded-full ${isAIActive ? 'bg-primary animate-pulse' : 'bg-neutral-300'}`}></div>
-            {isAIActive ? 'AI Smart' : 'Demo'}
         </div>
       </header>
 

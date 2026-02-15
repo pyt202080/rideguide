@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { Search, MapPin, X, Map as MapIcon, Crosshair, ArrowLeft, ArrowUpDown } from 'lucide-react';
 import { SearchState, Coordinates, PlaceResult } from '../types';
 import { searchAddress, reverseGeocode } from '../services/mapService';
@@ -103,7 +103,6 @@ const Step1_Search: React.FC<Step1Props> = ({ onSearch, initialData }) => {
   };
 
   const isReady = start.trim() && destination.trim();
-  const isAIActive = !!process.env.API_KEY;
 
   return (
     <div className="flex flex-col h-full w-full bg-neutral-50 relative">
@@ -116,12 +115,6 @@ const Step1_Search: React.FC<Step1Props> = ({ onSearch, initialData }) => {
             <div className="flex flex-col -space-y-1">
                 <span className="font-black text-xl tracking-tight text-neutral-900">뭐 <span className="text-primary">무까?</span></span>
                 <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Highway Guide</span>
-            </div>
-        </div>
-        <div className="flex items-center gap-4">
-            <div className={`text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-2 border ${isAIActive ? 'bg-orange-50 border-orange-100 text-primary' : 'bg-neutral-100 border-neutral-200 text-neutral-400'}`}>
-                <div className={`w-1.5 h-1.5 rounded-full ${isAIActive ? 'bg-primary animate-pulse' : 'bg-neutral-300'}`}></div>
-                {isAIActive ? 'AI Smart Search' : 'Demo Mode'}
             </div>
         </div>
       </header>

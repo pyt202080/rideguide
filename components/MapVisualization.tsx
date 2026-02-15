@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { RouteOption, Stop, Coordinates } from '../types';
 import { AlertCircle } from 'lucide-react';
 
@@ -18,11 +18,11 @@ declare global {
   }
 }
 
-const MapVisualization: React.FC<MapVisualizationProps> = ({ 
-  route, 
-  stops, 
-  selectedStopId, 
-  startPoint, 
+const MapVisualization: React.FC<MapVisualizationProps> = ({
+  route,
+  stops,
+  selectedStopId,
+  startPoint,
   endPoint,
   onMapClick,
   selectionMode
@@ -33,7 +33,7 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
   const overlays = useRef<any[]>([]);
   const polyline = useRef<any>(null);
   const [isApiLoaded, setIsApiLoaded] = useState(false);
-  const [useDemoMode, setUseDemoMode] = useState(false);
+  const [hasMapError, setHasMapError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
@@ -50,7 +50,7 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
           };
           const map = new window.kakao.maps.Map(mapContainer.current, options);
           mapInstance.current = map;
-          
+
           window.kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
             if (onMapClick) {
               const latlng = mouseEvent.latLng;
@@ -59,25 +59,29 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
           });
 
           setIsApiLoaded(true);
-          setUseDemoMode(false);
+          setHasMapError(false);
         } catch (err) {
           console.error("Kakao Map initialization failed:", err);
-          setUseDemoMode(true);
+          setHasMapError(true);
         }
       });
     };
 
+    if (selectionMode) {
+      setHasMapError(false);
+    }
+
     if (mapInstance.current) return;
-    
+
     if (typeof window.kakao !== 'undefined' && window.kakao.maps) {
       initMap();
     } else if (retryCount < 20) {
       const timer = setTimeout(() => setRetryCount(prev => prev + 1), 500);
       return () => clearTimeout(timer);
     } else {
-      setUseDemoMode(true);
+      setHasMapError(true);
     }
-  }, [retryCount, onMapClick]);
+  }, [retryCount, onMapClick, hasMapError, selectionMode]);
 
   useEffect(() => {
     if (!isApiLoaded || !mapInstance.current) return;
@@ -140,51 +144,39 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
     if (hasPoints) {
       map.setBounds(bounds);
     }
-    
+
     setTimeout(() => map.relayout(), 100);
   }, [isApiLoaded, route, stops, selectedStopId, startPoint, endPoint]);
 
-  const demoPathData = useMemo(() => {
-    if (!useDemoMode || !route?.path?.length) return null;
-    const lats = route.path.map(p => p.lat);
-    const lngs = route.path.map(p => p.lng);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-    const scale = (val: number, min: number, max: number) => {
-      const range = max - min || 1;
-      return ((val - min) / range) * 80 + 10;
-    };
-    const points = route.path.map(p => ({
-      x: scale(p.lng, minLng, maxLng),
-      y: 100 - scale(p.lat, minLat, maxLat)
-    }));
-    const pathString = `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ');
-    return { pathString };
-  }, [useDemoMode, route]);
+  const retryMapLoad = () => {
+    setHasMapError(false);
+    setIsApiLoaded(false);
+    setRetryCount(0);
+    mapInstance.current = null;
+    markers.current = [];
+    overlays.current = [];
+    polyline.current = null;
+  };
 
-  if (useDemoMode) {
+  if (hasMapError) {
     return (
       <div className="w-full h-full bg-neutral-100 flex items-center justify-center p-8 text-center">
         <div className="max-w-md bg-white p-10 rounded-[40px] shadow-premium border border-black/[0.03]">
             <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6">
                 <AlertCircle className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-black text-neutral-900 mb-3 tracking-tight">지도 API 연결 안내</h3>
+            <h3 className="text-xl font-black text-neutral-900 mb-3 tracking-tight">지도를 불러오지 못했습니다</h3>
             <div className="text-neutral-500 text-sm mb-6 leading-relaxed break-keep font-medium">
-                카카오 개발자 콘솔의 <strong>[플랫폼 &gt; Web]</strong> 메뉴에서<br/>
-                <span className="text-primary font-bold">https://rideguide.vercel.app</span> 를<br/>
-                '사이트 도메인'에 정확히 등록했는지 확인해 주세요.
+              카카오맵 SDK 로딩이 실패했습니다. 네트워크 제한, 광고 차단기, CSP 설정, 지도 앱키 또는 스크립트 로드 환경을 확인해 주세요.<br/>
+              <span className="text-primary font-bold">좌표 입력 기반 검색은 정상 동작합니다.</span>
             </div>
-            {demoPathData && (
-                <div className="bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
-                    <p className="text-[11px] font-black text-neutral-400 uppercase mb-2">경로 미리보기 (데모)</p>
-                    <svg viewBox="0 0 100 100" className="w-32 h-32 mx-auto">
-                        <path d={demoPathData.pathString} fill="none" stroke="#FF5C00" strokeWidth="2" strokeLinecap="round" />
-                    </svg>
-                </div>
-            )}
+            <button
+              type="button"
+              onClick={retryMapLoad}
+              className="px-6 py-3 bg-primary text-white rounded-2xl font-black text-sm shadow-lg shadow-primary/20 hover:bg-primary-dark transition-all"
+            >
+              지도 재시도
+            </button>
         </div>
       </div>
     );
@@ -193,11 +185,11 @@ const MapVisualization: React.FC<MapVisualizationProps> = ({
   return (
     <div className="w-full h-full relative overflow-hidden">
       <div ref={mapContainer} className="w-full h-full bg-neutral-200" />
-      {!isApiLoaded && !useDemoMode && (
+      {!isApiLoaded && !hasMapError && (
         <div className="absolute inset-0 bg-neutral-100 flex items-center justify-center z-10">
           <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-neutral-400 font-black text-sm tracking-tight">지도를 불러오고 있습니다...</p>
+            <p className="text-neutral-400 font-black text-sm tracking-tight">지도 API 로딩 중...</p>
           </div>
         </div>
       )}

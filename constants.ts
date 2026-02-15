@@ -10,5 +10,3 @@ export const CITIES_DATA: { name: string; lat: number; lng: number }[] = [
 
 export const KOREAN_CITIES = CITIES_DATA.map(c => c.name);
 
-// All mock route data has been removed for production testing.
-export const MOCK_ROUTES: any[] = [];
