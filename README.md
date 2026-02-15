@@ -15,6 +15,7 @@
 
 ## 환경변수
 - `KAKAO_REST_API_KEY`: Kakao Developers에서 발급한 REST API 키
+- `EXPRESSWAY_API_KEY`: 한국도로공사 OpenAPI 인증키 (없으면 기본 테스트키 사용)
 
 ## 기술 스택
 - Frontend: React + Vite + TailwindCSS

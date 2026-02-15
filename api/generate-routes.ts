@@ -38,10 +38,29 @@ interface RouteOption {
   sources?: GroundingSource[];
 }
 
+interface ExpresswayFoodRow {
+  stdRestCd?: string;
+  stdRestNm?: string;
+  routeNm?: string;
+  foodNm?: string;
+  foodCost?: string;
+  etc?: string;
+  recommendyn?: string;
+  bestfoodyn?: string;
+}
+
+interface RawKakaoRoute {
+  route: any;
+  priority: "RECOMMEND" | "TIME" | "DISTANCE";
+}
+
 const KAKAO_MOBILITY_BASE = "https://apis-navi.kakaomobility.com/v1/directions";
 const KAKAO_KEYWORD_BASE = "https://dapi.kakao.com/v2/local/search/keyword.json";
 const KAKAO_ADDRESS_BASE = "https://dapi.kakao.com/v2/local/search/address.json";
+const EX_BEST_FOOD_URL = "https://data.ex.co.kr/openapi/restinfo/restBestfoodList";
+
 const REST_AREA_QUERIES = ["\uD734\uAC8C\uC18C", "\uACE0\uC18D\uB3C4\uB85C \uD734\uAC8C\uC18C"];
+const PRIORITIES: Array<"RECOMMEND" | "TIME" | "DISTANCE"> = ["RECOMMEND", "TIME", "DISTANCE"];
 
 const EXCLUDE_REST_AREA_KEYWORDS = [
   "\uB3D9\uBB3C",
@@ -53,20 +72,10 @@ const EXCLUDE_REST_AREA_KEYWORDS = [
   "\uB9C8\uD2B8",
   "\uBAA8\UD154",
   "\uD638\UD154",
-  "\uD3B8\uC758\uC810"
+  "\uD3B8\uC758\uC810",
+  "\uC8F8\uC74C",
+  "\uC26C\uD130"
 ];
-
-const REST_AREA_MENU_HINTS: Record<string, string[]> = {
-  "\uB9DD\UD5A5\uD734\uAC8C\uC18C": ["\uD638\UB450\uACFC\uC790", "\uC789\uC5B4\uAD6D\uC218"],
-  "\uB355\uD3C9\uD734\uAC8C\uC18C": ["\uC18C\uACE0\uAE30\uAD6D\uBC25", "\uB3C8\uAC00\uC2A4"],
-  "\uC548\uC131\uD734\uAC8C\uC18C": ["\uD55C\uC6B0\uAD6D\uBC25", "\uC6B0\UB3D9"],
-  "\uCE60\uACE1\uD734\uAC8C\uC18C": ["\uBBFC\UB4E4\uB808\uAD6D\uBC25", "\uB3C8\uAC00\uC2A4"],
-  "\uBB38\uACBD\uD734\uAC8C\uC18C": ["\uC57D\uB3CC\uB3FC\uC9C0\uC815\uC2DD", "\uC789\uC5B4\uBE75"],
-  "\uD589\uB2F4\uB3C4\uD734\uAC8C\uC18C": ["\uC5B4\uBB35\uC6B0\UB3D9", "\uD638\UB450\uACFC\uC790"],
-  "\uCC9C\uC548\uC0BC\uAC70\uB9AC\uD734\uAC8C\uC18C": ["\uD638\UB450\uACFC\uC790", "\uC21C\uB300\uAD6D\uBC25"],
-  "\uADFC\uC721\uD734\uAC8C\uC18C": ["\uC5B4\uBB35\uC6B0\UB3D9", "\uAE40\uBC25"],
-  "\uC548\uB3D9\uD734\uAC8C\uC18C": ["\uAC04\uACE0\uB4F1\uC5B4\uC815\uC2DD", "\uCC1C\uB2ED"]
-};
 
 const parseRequestBody = (body: unknown): GenerateRoutesRequest => {
   if (!body) return {};
@@ -86,11 +95,11 @@ const authHeaders = (restKey: string) => ({
   "Content-Type": "application/json"
 });
 
-const fetchJson = async (url: string, restKey: string) => {
-  const response = await fetch(url, { method: "GET", headers: authHeaders(restKey) });
+const fetchJson = async (url: string, headers?: Record<string, string>) => {
+  const response = await fetch(url, { method: "GET", headers });
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`Kakao API error (${response.status}): ${detail}`);
+    throw new Error(`API error (${response.status}): ${detail}`);
   }
   return response.json();
 };
@@ -100,15 +109,33 @@ const toCoordinates = (x: string | number, y: string | number): Coordinates => (
   lat: Number(y)
 });
 
+const normalizeName = (name: string): string =>
+  name
+    .replace(/\(.*?\)/g, "")
+    .replace(/\s+/g, "")
+    .replace(/고속도로/g, "")
+    .replace(/선/g, "")
+    .trim()
+    .toLowerCase();
+
+const looksLikeHighwayRestArea = (doc: any): boolean => {
+  const name = String(doc?.place_name || "");
+  const category = String(doc?.category_name || "");
+  const text = `${name} ${category}`;
+  if (!text.includes("\uD734\uAC8C\uC18C")) return false;
+  if (EXCLUDE_REST_AREA_KEYWORDS.some((keyword) => text.includes(keyword))) return false;
+  return true;
+};
+
 const resolveCoordinates = async (query: string, restKey: string): Promise<Coordinates> => {
   const keywordUrl = `${KAKAO_KEYWORD_BASE}?query=${encodeURIComponent(query)}&size=1&sort=accuracy`;
-  const keywordData: any = await fetchJson(keywordUrl, restKey);
+  const keywordData: any = await fetchJson(keywordUrl, authHeaders(restKey));
   if (Array.isArray(keywordData?.documents) && keywordData.documents.length > 0) {
     return toCoordinates(keywordData.documents[0].x, keywordData.documents[0].y);
   }
 
   const addressUrl = `${KAKAO_ADDRESS_BASE}?query=${encodeURIComponent(query)}&size=1`;
-  const addressData: any = await fetchJson(addressUrl, restKey);
+  const addressData: any = await fetchJson(addressUrl, authHeaders(restKey));
   if (Array.isArray(addressData?.documents) && addressData.documents.length > 0) {
     return toCoordinates(addressData.documents[0].x, addressData.documents[0].y);
   }
@@ -137,55 +164,103 @@ const extractPathFromRoute = (route: any): Coordinates[] => {
       }
     });
   });
-  return samplePath(points, 160);
+  return samplePath(points, 220);
 };
 
-const samplePointsForStopSearch = (path: Coordinates[], count: number): Coordinates[] => {
-  if (path.length === 0) return [];
+const distanceMeters = (a: Coordinates, b: Coordinates): number => {
+  const r = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+};
+
+const samplePointsByDistance = (path: Coordinates[], count: number): Coordinates[] => {
   if (path.length <= count) return path;
-  const lastIndex = path.length - 1;
+  const segmentDistances: number[] = [0];
+  for (let i = 1; i < path.length; i++) {
+    segmentDistances.push(segmentDistances[i - 1] + distanceMeters(path[i - 1], path[i]));
+  }
+  const total = segmentDistances[segmentDistances.length - 1];
+  if (!total) return path.slice(0, count);
+
   const points: Coordinates[] = [];
   for (let i = 0; i < count; i++) {
-    const index = Math.floor((i * lastIndex) / (count - 1));
-    points.push(path[index]);
+    const target = (total * i) / (count - 1);
+    let idx = segmentDistances.findIndex((d) => d >= target);
+    if (idx < 0) idx = segmentDistances.length - 1;
+    points.push(path[idx]);
   }
   return points;
 };
 
-const extractGuideRestAreaNames = (route: any): string[] => {
+const extractRoadNamesFromRoute = (route: any): Set<string> => {
   const sections = Array.isArray(route?.sections) ? route.sections : [];
-  const guides = sections.flatMap((section: any) => (Array.isArray(section?.guides) ? section.guides : []));
-  const names = guides
-    .map((guide: any) => String(guide?.name || ""))
-    .filter((name: string) => name.includes("\uD734\uAC8C\uC18C"));
-  return Array.from(new Set(names));
+  const names = new Set<string>();
+  sections.forEach((section: any) => {
+    const roads = Array.isArray(section?.roads) ? section.roads : [];
+    roads.forEach((road: any) => {
+      const name = normalizeName(String(road?.name || ""));
+      if (name) names.add(name);
+    });
+  });
+  return names;
 };
 
-const looksLikeHighwayRestArea = (doc: any): boolean => {
-  const name = String(doc?.place_name || "");
-  const category = String(doc?.category_name || "");
-  const text = `${name} ${category}`;
-  if (!text.includes("\uD734\uAC8C\uC18C")) return false;
-  if (EXCLUDE_REST_AREA_KEYWORDS.some((keyword) => text.includes(keyword))) return false;
-  return true;
+const buildFoodIndex = (rows: ExpresswayFoodRow[], roadNames?: Set<string>) => {
+  const byRestName = new Map<string, { foods: string[]; description: string }>();
+  const officialRestNames = new Set<string>();
+
+  rows.forEach((row) => {
+    const restNameRaw = String(row.stdRestNm || "").trim();
+    if (!restNameRaw) return;
+    const restName = normalizeName(restNameRaw);
+    if (!restName) return;
+
+    if (roadNames && roadNames.size > 0) {
+      const routeName = normalizeName(String(row.routeNm || ""));
+      if (routeName && !Array.from(roadNames).some((road) => road.includes(routeName) || routeName.includes(road))) {
+        return;
+      }
+    }
+
+    officialRestNames.add(restName);
+    const prev = byRestName.get(restName) || { foods: [], description: "" };
+    const foodName = String(row.foodNm || "").trim();
+    if (foodName && !prev.foods.includes(foodName)) prev.foods.push(foodName);
+    if (!prev.description && row.etc) prev.description = String(row.etc).trim();
+    byRestName.set(restName, prev);
+  });
+
+  return { byRestName, officialRestNames };
 };
 
-const getMenuHints = (name: string): string[] => {
-  for (const key of Object.keys(REST_AREA_MENU_HINTS)) {
-    if (name.includes(key)) return REST_AREA_MENU_HINTS[key];
-  }
-  return ["\uB300\uD45C \uBA54\uB274 \uC815\uBCF4 \uC900\uBE44\uC911"];
+const fetchExpresswayFoods = async (apiKey: string): Promise<ExpresswayFoodRow[]> => {
+  const url = `${EX_BEST_FOOD_URL}?key=${encodeURIComponent(apiKey)}&type=json`;
+  const data: any = await fetchJson(url);
+  if (!Array.isArray(data?.list)) return [];
+  return data.list as ExpresswayFoodRow[];
 };
 
-const mapKakaoPlaceToStop = (doc: any, index: number): RouteStop => {
+const mapKakaoPlaceToStop = (
+  doc: any,
+  index: number,
+  foodIndex: Map<string, { foods: string[]; description: string }>
+): RouteStop => {
   const name = String(doc.place_name || `Rest Area ${index + 1}`);
+  const norm = normalizeName(name);
+  const foodInfo = foodIndex.get(norm);
+
   return {
     stopId: String(doc.id || `${name}_${index}`),
     type: "highway_rest_area",
     name,
     location: { lat: Number(doc.y), lng: Number(doc.x) },
-    topItems: getMenuHints(name),
-    description: String(doc.road_address_name || doc.address_name || "Route nearby rest area"),
+    topItems: foodInfo?.foods?.slice(0, 3) || ["\uB300\uD45C \uBA54\uB274 \uC815\uBCF4 \uC5C5\uB370\uC774\uD2B8 \uC911"],
+    description: foodInfo?.description || String(doc.road_address_name || doc.address_name || "Route nearby rest area"),
     rating: 4.2,
     imageUrl: `https://picsum.photos/400/300?restarea&sig=kakao_${index}`,
     searchLinks: {
@@ -196,62 +271,86 @@ const mapKakaoPlaceToStop = (doc: any, index: number): RouteStop => {
   };
 };
 
-const fetchPlaceByName = async (name: string, restKey: string, nearPoint?: Coordinates): Promise<RouteStop | null> => {
-  let url = `${KAKAO_KEYWORD_BASE}?query=${encodeURIComponent(name)}&size=10&sort=accuracy`;
-  if (nearPoint) {
-    url =
-      `${KAKAO_KEYWORD_BASE}?query=${encodeURIComponent(name)}` +
-      `&x=${nearPoint.lng}&y=${nearPoint.lat}&radius=20000&size=10&sort=distance`;
+const fetchRouteCandidates = async (
+  origin: Coordinates,
+  target: Coordinates,
+  restKey: string
+): Promise<RawKakaoRoute[]> => {
+  const all: RawKakaoRoute[] = [];
+
+  for (const priority of PRIORITIES) {
+    const params = new URLSearchParams({
+      origin: `${origin.lng},${origin.lat}`,
+      destination: `${target.lng},${target.lat}`,
+      priority,
+      alternatives: "true",
+      road_details: "false",
+      summary: "false"
+    });
+
+    const url = `${KAKAO_MOBILITY_BASE}?${params.toString()}`;
+    const data: any = await fetchJson(url, authHeaders(restKey));
+    const routes = Array.isArray(data?.routes) ? data.routes : [];
+    routes.forEach((route: any) => all.push({ route, priority }));
   }
-  const data: any = await fetchJson(url, restKey);
-  const docs = Array.isArray(data?.documents) ? data.documents : [];
-  const match = docs.find((doc: any) => looksLikeHighwayRestArea(doc)) || null;
-  return match ? mapKakaoPlaceToStop(match, 0) : null;
+
+  const deduped = new Map<string, RawKakaoRoute>();
+  all.forEach((item) => {
+    const summary = item.route?.summary || {};
+    const key = `${summary.distance || 0}_${summary.duration || 0}_${summary?.fare?.toll || 0}`;
+    if (!deduped.has(key)) deduped.set(key, item);
+  });
+  return Array.from(deduped.values());
 };
 
 const fetchRestAreasAlongPath = async (
   path: Coordinates[],
   restKey: string,
-  preferredNames: string[]
+  foodIndex: Map<string, { foods: string[]; description: string }>,
+  officialRestNames: Set<string>
 ): Promise<RouteStop[]> => {
-  const points = samplePointsForStopSearch(path, 7);
+  const points = samplePointsByDistance(path, 14);
   const dedupe = new Map<string, RouteStop>();
-  const centerPoint = points[Math.floor(points.length / 2)];
-
-  for (const preferredName of preferredNames) {
-    const stop = await fetchPlaceByName(preferredName, restKey, centerPoint);
-    if (!stop) continue;
-    const key = stop.stopId || stop.name;
-    if (!dedupe.has(key)) dedupe.set(key, stop);
-  }
 
   for (const point of points) {
     for (const query of REST_AREA_QUERIES) {
       const url =
         `${KAKAO_KEYWORD_BASE}?query=${encodeURIComponent(query)}` +
-        `&x=${point.lng}&y=${point.lat}&radius=14000&size=10&sort=distance`;
+        `&x=${point.lng}&y=${point.lat}&radius=18000&size=15&sort=distance`;
 
-      const data: any = await fetchJson(url, restKey);
+      const data: any = await fetchJson(url, authHeaders(restKey));
       const docs = Array.isArray(data?.documents) ? data.documents : [];
 
       docs.forEach((doc: any) => {
         if (!looksLikeHighwayRestArea(doc)) return;
-        const key = String(doc.id || doc.place_name || `${doc.x}_${doc.y}`);
-        if (!dedupe.has(key)) dedupe.set(key, mapKakaoPlaceToStop(doc, dedupe.size));
-      });
 
-      if (dedupe.size >= 10) break;
+        const norm = normalizeName(String(doc.place_name || ""));
+        if (officialRestNames.size > 0) {
+          const isOfficial = Array.from(officialRestNames).some(
+            (official) => norm.includes(official) || official.includes(norm)
+          );
+          if (!isOfficial) return;
+        }
+
+        const key = String(doc.id || doc.place_name || `${doc.x}_${doc.y}`);
+        if (!dedupe.has(key)) dedupe.set(key, mapKakaoPlaceToStop(doc, dedupe.size, foodIndex));
+      });
     }
-    if (dedupe.size >= 10) break;
   }
 
-  return Array.from(dedupe.values()).slice(0, 10);
+  return Array.from(dedupe.values()).slice(0, 12);
 };
 
-const toRouteSummary = (index: number, distanceKm: number, durationMin: number): string => {
+const toRouteSummary = (
+  index: number,
+  priority: "RECOMMEND" | "TIME" | "DISTANCE",
+  distanceKm: number,
+  durationMin: number
+): string => {
   const hour = Math.floor(durationMin / 60);
   const min = durationMin % 60;
-  return `경로 ${index + 1} · ${distanceKm}km · ${hour}h ${min}m`;
+  const label = priority === "RECOMMEND" ? "추천" : priority === "TIME" ? "최단시간" : "최단거리";
+  return `${label} 경로 ${index + 1} · ${distanceKm}km · ${hour}h ${min}m`;
 };
 
 export default async function handler(req: any, res: any) {
@@ -259,8 +358,8 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const restKey = (process.env.KAKAO_REST_API_KEY || process.env.KAKAO_API_KEY || "").trim();
-  if (!restKey) {
+  const kakaoRestKey = (process.env.KAKAO_REST_API_KEY || process.env.KAKAO_API_KEY || "").trim();
+  if (!kakaoRestKey) {
     return res.status(500).json({ error: "Server KAKAO_REST_API_KEY is not configured" });
   }
 
@@ -272,35 +371,30 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const origin = body.startCoords || (await resolveCoordinates(start, restKey));
-    const target = body.destCoords || (await resolveCoordinates(destination, restKey));
+    const origin = body.startCoords || (await resolveCoordinates(start, kakaoRestKey));
+    const target = body.destCoords || (await resolveCoordinates(destination, kakaoRestKey));
 
-    const directionsParams = new URLSearchParams({
-      origin: `${origin.lng},${origin.lat}`,
-      destination: `${target.lng},${target.lat}`,
-      priority: "RECOMMEND",
-      alternatives: "true",
-      road_details: "false",
-      summary: "false"
-    });
-    const directionsUrl = `${KAKAO_MOBILITY_BASE}?${directionsParams.toString()}`;
-    const directionsData: any = await fetchJson(directionsUrl, restKey);
-    const routesRaw = Array.isArray(directionsData?.routes) ? directionsData.routes : [];
-    if (routesRaw.length === 0) return res.status(200).json({ routes: [] });
+    const routeCandidates = await fetchRouteCandidates(origin, target, kakaoRestKey);
+    if (routeCandidates.length === 0) return res.status(200).json({ routes: [] });
+
+    const exApiKey =
+      (process.env.EXPRESSWAY_API_KEY || process.env.KOREA_EXPRESSWAY_API_KEY || "test").trim();
+    const exRows = await fetchExpresswayFoods(exApiKey);
 
     const routes: RouteOption[] = [];
-    for (let i = 0; i < routesRaw.length; i++) {
-      const rawRoute = routesRaw[i];
+    for (let i = 0; i < routeCandidates.length; i++) {
+      const { route: rawRoute, priority } = routeCandidates[i];
       const summary = rawRoute?.summary || {};
       const path = extractPathFromRoute(rawRoute);
-      const guideRestAreaNames = extractGuideRestAreaNames(rawRoute);
-      const stops = await fetchRestAreasAlongPath(path, restKey, guideRestAreaNames);
+      const roadNames = extractRoadNamesFromRoute(rawRoute);
+      const { byRestName, officialRestNames } = buildFoodIndex(exRows, roadNames);
+      const stops = await fetchRestAreasAlongPath(path, kakaoRestKey, byRestName, officialRestNames);
       const distanceKm = Math.round((Number(summary.distance || 0) / 1000) * 10) / 10;
       const durationMin = Math.round(Number(summary.duration || 0) / 60);
 
       routes.push({
         routeId: `kakao_route_${Date.now()}_${i}`,
-        summary: toRouteSummary(i, distanceKm, durationMin),
+        summary: toRouteSummary(i, priority, distanceKm, durationMin),
         distanceKm,
         durationMin,
         toll: Number(summary?.fare?.toll || 0) > 0,
@@ -308,7 +402,8 @@ export default async function handler(req: any, res: any) {
         stops,
         sources: [
           { title: "Kakao Mobility Directions API", uri: "https://developers.kakaomobility.com/docs/navi-api/directions/" },
-          { title: "Kakao Local Search API", uri: "https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword" }
+          { title: "Kakao Local Search API", uri: "https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword" },
+          { title: "Korea Expressway Corporation Rest Area API", uri: "https://data.ex.co.kr/openapi/" }
         ]
       });
     }
