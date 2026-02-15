@@ -35,14 +35,16 @@ const StopRow: React.FC<{ stop: Stop; index: number }> = ({ stop, index }) => (
           </div>
         </div>
         
-        <div className="flex flex-wrap gap-1.5 mb-3">
+        <div className={`flex flex-wrap gap-1.5 ${stop.description?.trim() ? 'mb-3' : 'mb-0'}`}>
           {stop.topItems.map((item, i) => (
             <span key={i} className="inline-flex items-center text-[11px] font-bold px-3 py-1 rounded-full border text-neutral-700 bg-neutral-100 border-neutral-200">
               {item}
             </span>
           ))}
         </div>
-        <p className="text-[13.5px] text-neutral-500 font-medium leading-relaxed line-clamp-2">{stop.description}</p>
+        {stop.description?.trim() && (
+          <p className="text-[13.5px] text-neutral-500 font-medium leading-relaxed line-clamp-2">{stop.description}</p>
+        )}
       </div>
 
       <div className="flex flex-row lg:flex-col gap-2 flex-none lg:min-w-[120px]">

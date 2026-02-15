@@ -561,11 +561,7 @@ const buildStop = (
 ): RouteStop => {
   const menuInfo = findFoodMeta(officialKey, officialName, String(doc.place_name || ""), foodByRest);
   const menuList = menuInfo?.foods.slice(0, 3) || [];
-  const description =
-    menuInfo?.description ||
-    (menuList.length > 0
-      ? `대표 메뉴: ${menuList.join(", ")}`
-      : String(doc.road_address_name || doc.address_name || "경로 인근 휴게소"));
+  const description = String(menuInfo?.description || "").trim();
 
   return {
     stopId: String(doc.id || `${officialName}_${indexSeed}`),
