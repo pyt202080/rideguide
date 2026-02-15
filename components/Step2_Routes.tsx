@@ -17,7 +17,7 @@ const LOADING_MESSAGES = [
 const STOPS_PAGE_SIZE = 10;
 
 const StopRow: React.FC<{ stop: Stop; index: number }> = ({ stop, index }) => (
-  <div className="group relative flex items-start gap-4 py-8 border-b border-black/[0.03] hover:bg-neutral-50/80 transition-all px-6 -mx-6 rounded-2xl">
+  <div className="group relative flex items-start gap-4 py-7 border-b border-black/[0.03] hover:bg-neutral-50/80 transition-all px-6 -mx-6 rounded-2xl">
     <div className="flex flex-col items-center flex-none w-10">
       <div className="w-8 h-8 rounded-full bg-white border-2 border-neutral-100 flex items-center justify-center text-[11px] font-black text-neutral-400 group-hover:border-primary group-hover:text-primary group-hover:scale-110 transition-all z-10 shadow-sm">
         {index + 1}
@@ -25,7 +25,7 @@ const StopRow: React.FC<{ stop: Stop; index: number }> = ({ stop, index }) => (
       <div className="w-[1.5px] h-full bg-neutral-100 mt-2 group-last:hidden"></div>
     </div>
 
-    <div className="flex-1 min-w-0 flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-10">
+    <div className="flex-1 min-w-0 flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-8">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-2">
           <h4 className="font-black text-[18px] text-neutral-900 tracking-tight">{stop.name}</h4>
@@ -37,7 +37,7 @@ const StopRow: React.FC<{ stop: Stop; index: number }> = ({ stop, index }) => (
         
         <div className="flex flex-wrap gap-1.5 mb-3">
           {stop.topItems.map((item, i) => (
-            <span key={i} className="text-[11px] font-bold text-primary bg-primary/5 px-3 py-1 rounded-full border border-primary/10">
+            <span key={i} className="text-[11px] font-bold text-neutral-700 bg-neutral-100 px-3 py-1 rounded-full border border-neutral-200">
               {item}
             </span>
           ))}
@@ -45,12 +45,12 @@ const StopRow: React.FC<{ stop: Stop; index: number }> = ({ stop, index }) => (
         <p className="text-[13.5px] text-neutral-500 font-medium leading-relaxed line-clamp-2">{stop.description}</p>
       </div>
 
-      <div className="flex flex-row lg:flex-col gap-2 flex-none lg:min-w-[130px]">
+      <div className="flex flex-row lg:flex-col gap-2 flex-none lg:min-w-[120px]">
         <a 
           href={stop.searchLinks.kakao} 
           target="_blank" 
           rel="noreferrer" 
-          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-[#FAE100] text-[#3C1E1E] text-[12px] font-black rounded-xl hover:brightness-95 transition-all shadow-sm active:scale-95"
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-[#FAE100] text-[#3C1E1E] text-[12px] font-black rounded-xl hover:brightness-95 transition-all active:scale-95"
         >
           카카오맵
         </a>
@@ -58,15 +58,11 @@ const StopRow: React.FC<{ stop: Stop; index: number }> = ({ stop, index }) => (
           href={stop.searchLinks.naver} 
           target="_blank" 
           rel="noreferrer" 
-          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-[#03C75A] text-white text-[12px] font-black rounded-xl hover:brightness-95 transition-all shadow-sm active:scale-95"
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-[#03C75A] text-white text-[12px] font-black rounded-xl hover:brightness-95 transition-all active:scale-95"
         >
           네이버
         </a>
       </div>
-    </div>
-    
-    <div className="hidden xl:block flex-none w-32 h-20 rounded-2xl overflow-hidden bg-neutral-100 ml-4 border border-black/[0.05] shadow-inner">
-      <img src={stop.imageUrl} alt={stop.name} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500" />
     </div>
   </div>
 );
