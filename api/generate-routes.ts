@@ -258,17 +258,37 @@ const nearestPathPoint = (
 };
 
 const fetchExpresswayFoods = async (apiKey: string): Promise<ExpresswayFoodRow[]> => {
-  const url = `${EX_BEST_FOOD_URL}?key=${encodeURIComponent(apiKey)}&type=json`;
-  const data: any = await fetchJson(url);
-  if (!Array.isArray(data?.list)) return [];
-  return data.list as ExpresswayFoodRow[];
+  const rows = await fetchExpresswayPaged<ExpresswayFoodRow>(EX_BEST_FOOD_URL, apiKey);
+  return rows;
 };
 
 const fetchExpresswayRestAreas = async (apiKey: string): Promise<ExpresswayRestRow[]> => {
-  const url = `${EX_REST_INFO_URL}?key=${encodeURIComponent(apiKey)}&type=json`;
-  const data: any = await fetchJson(url);
-  if (!Array.isArray(data?.list)) return [];
-  return data.list as ExpresswayRestRow[];
+  const rows = await fetchExpresswayPaged<ExpresswayRestRow>(EX_REST_INFO_URL, apiKey);
+  return rows;
+};
+
+const fetchExpresswayPaged = async <T>(baseUrl: string, apiKey: string): Promise<T[]> => {
+  const pageSize = 500;
+  const maxPages = 30;
+  const merged: T[] = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    const url =
+      `${baseUrl}?key=${encodeURIComponent(apiKey)}&type=json` +
+      `&numOfRows=${pageSize}&pageNo=${page}`;
+
+    const data: any = await fetchJson(url);
+    const list = Array.isArray(data?.list) ? (data.list as T[]) : [];
+    if (list.length === 0) break;
+    merged.push(...list);
+    if (list.length < pageSize) break;
+  }
+
+  if (merged.length > 0) return merged;
+
+  const fallbackUrl = `${baseUrl}?key=${encodeURIComponent(apiKey)}&type=json`;
+  const fallback: any = await fetchJson(fallbackUrl);
+  return Array.isArray(fallback?.list) ? (fallback.list as T[]) : [];
 };
 
 const buildIndexes = (foodRows: ExpresswayFoodRow[], restRows: ExpresswayRestRow[]) => {
