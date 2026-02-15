@@ -16,8 +16,9 @@ const fetchJson = async (url: string) => {
 
 const fetchPaged = async <T>(baseUrl: string, apiKey: string): Promise<T[]> => {
   const pageSize = 500;
-  const maxPages = 30;
+  const maxPages = 120;
   const merged: T[] = [];
+  const seenPageSignatures = new Set<string>();
 
   for (let page = 1; page <= maxPages; page++) {
     const url =
@@ -26,8 +27,14 @@ const fetchPaged = async <T>(baseUrl: string, apiKey: string): Promise<T[]> => {
     const data: any = await fetchJson(url);
     const list = Array.isArray(data?.list) ? (data.list as T[]) : [];
     if (list.length === 0) break;
+
+    const first = JSON.stringify(list[0] ?? null);
+    const last = JSON.stringify(list[list.length - 1] ?? null);
+    const signature = `${list.length}|${first}|${last}`;
+    if (seenPageSignatures.has(signature)) break;
+    seenPageSignatures.add(signature);
+
     merged.push(...list);
-    if (list.length < pageSize) break;
   }
 
   if (merged.length > 0) return merged;
@@ -74,4 +81,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
