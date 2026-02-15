@@ -48,6 +48,9 @@ interface ExpresswayFoodRow {
   foodNm?: string;
   foodCost?: string;
   etc?: string;
+  recommendyn?: string;
+  bestfoodyn?: string;
+  premiumyn?: string;
 }
 
 interface ExpresswayRestRow {
@@ -63,8 +66,15 @@ interface LocalRestIndexFile {
   generatedAt?: string;
   restRows?: ExpresswayRestRow[];
   foodRows?: ExpresswayFoodRow[];
+  popularRows?: PopularMenuRow[];
   restAreas?: ExpresswayRestRow[];
   foods?: ExpresswayFoodRow[];
+}
+
+interface PopularMenuRow {
+  restName?: string;
+  itemName?: string;
+  rank?: number;
 }
 
 interface OfficialRestMeta {
@@ -96,7 +106,10 @@ const EX_REST_INFO_URL = "https://data.ex.co.kr/openapi/restinfo/hiwaySvarInfoLi
 const LOCAL_REST_INDEX_PATH = path.join(process.cwd(), "data", "rest-index.json");
 const LOCAL_REST_INDEX_CACHE_TTL_MS = 5 * 60 * 1000;
 let localRestIndexCache:
-  | { loadedAt: number; data: { foodRows: ExpresswayFoodRow[]; restRows: ExpresswayRestRow[] } }
+  | {
+      loadedAt: number;
+      data: { foodRows: ExpresswayFoodRow[]; restRows: ExpresswayRestRow[]; popularRows: PopularMenuRow[] };
+    }
   | null = null;
 
 const REST_AREA_QUERIES = ["휴게소", "고속도로 휴게소"];
@@ -145,7 +158,11 @@ const fetchJson = async (url: string, headers?: Record<string, string>) => {
   return response.json();
 };
 
-const loadLocalRestIndex = (): { foodRows: ExpresswayFoodRow[]; restRows: ExpresswayRestRow[] } | null => {
+const loadLocalRestIndex = (): {
+  foodRows: ExpresswayFoodRow[];
+  restRows: ExpresswayRestRow[];
+  popularRows: PopularMenuRow[];
+} | null => {
   const now = Date.now();
   if (localRestIndexCache && now - localRestIndexCache.loadedAt < LOCAL_REST_INDEX_CACHE_TTL_MS) {
     return localRestIndexCache.data;
@@ -165,10 +182,11 @@ const loadLocalRestIndex = (): { foodRows: ExpresswayFoodRow[]; restRows: Expres
       : Array.isArray(parsed.foods)
         ? parsed.foods
         : [];
+    const popularRows = Array.isArray(parsed.popularRows) ? parsed.popularRows : [];
 
     if (restRows.length === 0 && foodRows.length === 0) return null;
 
-    const data = { restRows, foodRows };
+    const data = { restRows, foodRows, popularRows };
     localRestIndexCache = { loadedAt: now, data };
     return data;
   } catch (error) {
@@ -344,16 +362,56 @@ const fetchExpresswayRestAreas = async (apiKey: string): Promise<ExpresswayRestR
   return fetchExpresswayPaged<ExpresswayRestRow>(EX_REST_INFO_URL, apiKey);
 };
 
-const buildIndexes = (foodRows: ExpresswayFoodRow[], restRows: ExpresswayRestRow[]) => {
-  const foodByRest = new Map<string, FoodMeta>();
+const foodRowScore = (row: ExpresswayFoodRow): number => {
+  let score = 0;
+  if (String(row.bestfoodyn || "").toUpperCase() === "Y") score += 100;
+  if (String(row.recommendyn || "").toUpperCase() === "Y") score += 50;
+  if (String(row.premiumyn || "").toUpperCase() === "Y") score += 30;
+  return score;
+};
+
+const buildIndexes = (
+  foodRows: ExpresswayFoodRow[],
+  restRows: ExpresswayRestRow[],
+  popularRows: PopularMenuRow[]
+) => {
+  const foodByRest = new Map<string, { scoreByFood: Map<string, number>; description: string }>();
   foodRows.forEach((row) => {
     const norm = normalizeRestName(String(row.stdRestNm || ""));
     if (!norm) return;
-    const current = foodByRest.get(norm) || { foods: [], description: "" };
+    const current = foodByRest.get(norm) || { scoreByFood: new Map<string, number>(), description: "" };
     const foodName = String(row.foodNm || "").trim();
-    if (foodName && !current.foods.includes(foodName)) current.foods.push(foodName);
+    if (foodName) {
+      const score = foodRowScore(row);
+      const prev = current.scoreByFood.get(foodName) ?? Number.NEGATIVE_INFINITY;
+      current.scoreByFood.set(foodName, Math.max(prev, score));
+    }
     if (!current.description && row.etc) current.description = String(row.etc).trim();
     foodByRest.set(norm, current);
+  });
+
+  popularRows.forEach((row) => {
+    const restKey = normalizeRestName(String(row.restName || ""));
+    const item = String(row.itemName || "").trim();
+    if (!restKey || !item) return;
+    const rankNum = Number(row.rank || 99);
+    const bonus = Math.max(0, 10 - Math.min(rankNum, 10)) * 20;
+    const current = foodByRest.get(restKey) || { scoreByFood: new Map<string, number>(), description: "" };
+    const prev = current.scoreByFood.get(item) ?? Number.NEGATIVE_INFINITY;
+    current.scoreByFood.set(item, Math.max(prev, 120 + bonus));
+    foodByRest.set(restKey, current);
+  });
+
+  const rankedFoodByRest = new Map<string, FoodMeta>();
+  foodByRest.forEach((value, key) => {
+    const foods = Array.from(value.scoreByFood.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map((x) => x[0])
+      .slice(0, 5);
+    rankedFoodByRest.set(key, {
+      foods,
+      description: value.description
+    });
   });
 
   const restMetaByName = new Map<string, OfficialRestMeta>();
@@ -371,7 +429,7 @@ const buildIndexes = (foodRows: ExpresswayFoodRow[], restRows: ExpresswayRestRow
     restMetaByName.set(norm, current);
   });
 
-  return { foodByRest, restMetaByName };
+  return { foodByRest: rankedFoodByRest, restMetaByName };
 };
 
 const findOfficialRestKey = (candidateNorm: string, knownKeys: string[]): string | null => {
@@ -625,10 +683,12 @@ export default async function handler(req: any, res: any) {
 
     let foodRows: ExpresswayFoodRow[] = [];
     let restRows: ExpresswayRestRow[] = [];
+    let popularRows: PopularMenuRow[] = [];
     const localIndex = loadLocalRestIndex();
     if (localIndex) {
       foodRows = localIndex.foodRows;
       restRows = localIndex.restRows;
+      popularRows = localIndex.popularRows;
     } else {
       const exApiKey =
         (process.env.EXPRESSWAY_API_KEY || process.env.KOREA_EXPRESSWAY_API_KEY || "test").trim();
@@ -637,7 +697,7 @@ export default async function handler(req: any, res: any) {
         fetchExpresswayRestAreas(exApiKey)
       ]);
     }
-    const { foodByRest, restMetaByName } = buildIndexes(foodRows, restRows);
+    const { foodByRest, restMetaByName } = buildIndexes(foodRows, restRows, popularRows);
 
     const evaluated = await Promise.all(
       routeCandidates.map(async ({ route: rawRoute, priority }) => {

@@ -4,6 +4,13 @@ import path from "node:path";
 const EX_BEST_FOOD_URL = "https://data.ex.co.kr/openapi/restinfo/restBestfoodList";
 const EX_REST_INFO_URL = "https://data.ex.co.kr/openapi/restinfo/hiwaySvarInfoList";
 const OUTPUT_PATH = path.join(process.cwd(), "data", "rest-index.json");
+const POPULAR_JSON_PATH = path.join(process.cwd(), "data", "r0-popular.json");
+
+interface PopularMenuRow {
+  restName?: string;
+  itemName?: string;
+  rank?: number;
+}
 
 const fetchJson = async (url: string) => {
   const response = await fetch(url, { method: "GET" });
@@ -60,6 +67,16 @@ const main = async () => {
     fetchPaged<any>(EX_BEST_FOOD_URL, key.trim())
   ]);
 
+  let popularRows: PopularMenuRow[] = [];
+  if (fs.existsSync(POPULAR_JSON_PATH)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(POPULAR_JSON_PATH, "utf8"));
+      if (Array.isArray(parsed)) popularRows = parsed;
+    } catch (error) {
+      console.error("Failed to parse data/r0-popular.json:", error);
+    }
+  }
+
   const payload = {
     generatedAt: new Date().toISOString(),
     source: {
@@ -67,14 +84,15 @@ const main = async () => {
       bestFood: EX_BEST_FOOD_URL
     },
     restRows,
-    foodRows
+    foodRows,
+    popularRows
   };
 
   fs.mkdirSync(path.dirname(OUTPUT_PATH), { recursive: true });
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(payload, null, 2), "utf8");
 
   console.log(`Saved ${OUTPUT_PATH}`);
-  console.log(`restRows=${restRows.length}, foodRows=${foodRows.length}`);
+  console.log(`restRows=${restRows.length}, foodRows=${foodRows.length}, popularRows=${popularRows.length}`);
 };
 
 main().catch((error) => {
