@@ -41,7 +41,31 @@ interface RouteOption {
 const KAKAO_MOBILITY_BASE = "https://apis-navi.kakaomobility.com/v1/directions";
 const KAKAO_KEYWORD_BASE = "https://dapi.kakao.com/v2/local/search/keyword.json";
 const KAKAO_ADDRESS_BASE = "https://dapi.kakao.com/v2/local/search/address.json";
-const REST_AREA_QUERY = "\uD734\uAC8C\uC18C";
+const REST_AREA_QUERY = "\uACE0\uC18D\uB3C4\uB85C \uD734\uAC8C\uC18C";
+
+const EXCLUDE_REST_AREA_KEYWORDS = [
+  "\uB3D9\uBB3C",
+  "\uC560\uACAC",
+  "\uCE74\uD398",
+  "\uBCF4\uD638\uC13C\uD130",
+  "\uC8FC\uCC28\uC7A5",
+  "\uC138\uCC28",
+  "\uB9C8\uD2B8",
+  "\uBAA8\UD154",
+  "\uD638\UD154",
+  "\uD3B8\uC758\uC810"
+];
+
+const REST_AREA_MENU_HINTS: Record<string, string[]> = {
+  "\uB9DD\UD5A5\uD734\uAC8C\uC18C": ["\uD638\UB450\uACFC\uC790", "\uC789\uC5B4\uAD6D\uC218"],
+  "\uB355\uD3C9\uD734\uAC8C\uC18C": ["\uC18C\uACE0\uAE30\uAD6D\uBC25", "\uB3C8\uAC00\uC2A4"],
+  "\uC548\uC131\uD734\uAC8C\uC18C": ["\uD55C\uC6B0\uAD6D\uBC25", "\uC6B0\UB3D9"],
+  "\uCE60\uACE1\uD734\uAC8C\uC18C": ["\uBBFC\UB4E4\uB808\uAD6D\uBC25", "\uB3C8\uAC00\uC2A4"],
+  "\uBB38\uACBD\uD734\uAC8C\uC18C": ["\uC57D\uB3CC\uB3FC\uC9C0\uC815\uC2DD", "\uC789\uC5B4\uBE75"],
+  "\uD589\uB2F4\uB3C4\uD734\uAC8C\uC18C": ["\uC5B4\uBB35\uC6B0\UB3D9", "\uD638\UB450\uACFC\uC790"],
+  "\uCC9C\uC548\uC0BC\uAC70\uB9AC\uD734\uAC8C\uC18C": ["\uD638\UB450\uACFC\uC790", "\uC21C\uB300\uAD6D\uBC25"],
+  "\uADFC\uC721\uD734\uAC8C\uC18C": ["\uC5B4\uBB35\uC6B0\UB3D9", "\uAE40\uBC25"]
+};
 
 const parseRequestBody = (body: unknown): GenerateRoutesRequest => {
   if (!body) return {};
@@ -127,6 +151,22 @@ const samplePointsForStopSearch = (path: Coordinates[], count: number): Coordina
   return points;
 };
 
+const looksLikeHighwayRestArea = (doc: any): boolean => {
+  const name = String(doc?.place_name || "");
+  const category = String(doc?.category_name || "");
+  const text = `${name} ${category}`;
+  if (!text.includes("\uD734\uAC8C\uC18C")) return false;
+  if (EXCLUDE_REST_AREA_KEYWORDS.some((keyword) => text.includes(keyword))) return false;
+  return true;
+};
+
+const getMenuHints = (name: string): string[] => {
+  for (const key of Object.keys(REST_AREA_MENU_HINTS)) {
+    if (name.includes(key)) return REST_AREA_MENU_HINTS[key];
+  }
+  return ["\uB300\uD45C \uBA54\uB274 \uC815\uBCF4 \uC900\uBE44\uC911"];
+};
+
 const mapKakaoPlaceToStop = (doc: any, index: number): RouteStop => {
   const name = String(doc.place_name || `Rest Area ${index + 1}`);
   return {
@@ -134,7 +174,7 @@ const mapKakaoPlaceToStop = (doc: any, index: number): RouteStop => {
     type: "highway_rest_area",
     name,
     location: { lat: Number(doc.y), lng: Number(doc.x) },
-    topItems: [],
+    topItems: getMenuHints(name),
     description: String(doc.road_address_name || doc.address_name || "Route nearby rest area"),
     rating: 4.2,
     imageUrl: `https://picsum.photos/400/300?restarea&sig=kakao_${index}`,
@@ -153,20 +193,27 @@ const fetchRestAreasAlongPath = async (path: Coordinates[], restKey: string): Pr
   for (const point of points) {
     const url =
       `${KAKAO_KEYWORD_BASE}?query=${encodeURIComponent(REST_AREA_QUERY)}` +
-      `&x=${point.lng}&y=${point.lat}&radius=15000&size=5&sort=distance`;
+      `&x=${point.lng}&y=${point.lat}&radius=12000&size=8&sort=distance`;
 
     const data: any = await fetchJson(url, restKey);
     const docs = Array.isArray(data?.documents) ? data.documents : [];
+
     docs.forEach((doc: any) => {
+      if (!looksLikeHighwayRestArea(doc)) return;
       const key = String(doc.id || doc.place_name || `${doc.x}_${doc.y}`);
-      if (!dedupe.has(key)) {
-        dedupe.set(key, mapKakaoPlaceToStop(doc, dedupe.size));
-      }
+      if (!dedupe.has(key)) dedupe.set(key, mapKakaoPlaceToStop(doc, dedupe.size));
     });
-    if (dedupe.size >= 8) break;
+
+    if (dedupe.size >= 10) break;
   }
 
-  return Array.from(dedupe.values()).slice(0, 8);
+  return Array.from(dedupe.values()).slice(0, 10);
+};
+
+const toRouteSummary = (index: number, distanceKm: number, durationMin: number): string => {
+  const hour = Math.floor(durationMin / 60);
+  const min = durationMin % 60;
+  return `경로 ${index + 1} · ${distanceKm}km · ${hour}h ${min}m`;
 };
 
 export default async function handler(req: any, res: any) {
@@ -194,36 +241,40 @@ export default async function handler(req: any, res: any) {
       origin: `${origin.lng},${origin.lat}`,
       destination: `${target.lng},${target.lat}`,
       priority: "RECOMMEND",
-      alternatives: "false",
+      alternatives: "true",
       road_details: "false",
       summary: "false"
     });
     const directionsUrl = `${KAKAO_MOBILITY_BASE}?${directionsParams.toString()}`;
     const directionsData: any = await fetchJson(directionsUrl, restKey);
-    const firstRoute = Array.isArray(directionsData?.routes) ? directionsData.routes[0] : null;
-    if (!firstRoute) {
-      return res.status(200).json({ routes: [] });
+    const routesRaw = Array.isArray(directionsData?.routes) ? directionsData.routes : [];
+    if (routesRaw.length === 0) return res.status(200).json({ routes: [] });
+
+    const routes: RouteOption[] = [];
+    for (let i = 0; i < routesRaw.length; i++) {
+      const rawRoute = routesRaw[i];
+      const summary = rawRoute?.summary || {};
+      const path = extractPathFromRoute(rawRoute);
+      const stops = await fetchRestAreasAlongPath(path, restKey);
+      const distanceKm = Math.round((Number(summary.distance || 0) / 1000) * 10) / 10;
+      const durationMin = Math.round(Number(summary.duration || 0) / 60);
+
+      routes.push({
+        routeId: `kakao_route_${Date.now()}_${i}`,
+        summary: toRouteSummary(i, distanceKm, durationMin),
+        distanceKm,
+        durationMin,
+        toll: Number(summary?.fare?.toll || 0) > 0,
+        path,
+        stops,
+        sources: [
+          { title: "Kakao Mobility Directions API", uri: "https://developers.kakaomobility.com/docs/navi-api/directions/" },
+          { title: "Kakao Local Search API", uri: "https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword" }
+        ]
+      });
     }
 
-    const path = extractPathFromRoute(firstRoute);
-    const stops = await fetchRestAreasAlongPath(path, restKey);
-    const summary = firstRoute?.summary || {};
-
-    const route: RouteOption = {
-      routeId: `kakao_route_${Date.now()}`,
-      summary: "카카오 길찾기 추천 경로",
-      distanceKm: Math.round((Number(summary.distance || 0) / 1000) * 10) / 10,
-      durationMin: Math.round(Number(summary.duration || 0) / 60),
-      toll: Number(summary?.fare?.toll || 0) > 0,
-      path,
-      stops,
-      sources: [
-        { title: "Kakao Mobility Directions API", uri: "https://developers.kakaomobility.com/docs/navi-api/directions/" },
-        { title: "Kakao Local Search API", uri: "https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword" }
-      ]
-    };
-
-    return res.status(200).json({ routes: [route] });
+    return res.status(200).json({ routes });
   } catch (error) {
     console.error("Kakao route generation failed:", error);
     const detail = error instanceof Error ? error.message : String(error);
