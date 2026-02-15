@@ -1,4 +1,4 @@
-interface GenerateRoutesRequest {
+﻿interface GenerateRoutesRequest {
   start?: string;
   destination?: string;
   startCoords?: { lat: number; lng: number };
@@ -45,8 +45,25 @@ interface ExpresswayFoodRow {
   foodNm?: string;
   foodCost?: string;
   etc?: string;
-  recommendyn?: string;
-  bestfoodyn?: string;
+}
+
+interface ExpresswayRestRow {
+  svarCd?: string;
+  svarNm?: string;
+  routeNm?: string;
+  updownNm?: string;
+  svarGsstClssCd?: string;
+  svarGsstClssNm?: string;
+}
+
+interface OfficialRestMeta {
+  displayName: string;
+  routeNames: Set<string>;
+}
+
+interface FoodMeta {
+  foods: string[];
+  description: string;
 }
 
 interface RawKakaoRoute {
@@ -54,27 +71,35 @@ interface RawKakaoRoute {
   priority: "RECOMMEND" | "TIME" | "DISTANCE";
 }
 
+interface CandidateStop {
+  stop: RouteStop;
+  order: number;
+  distanceToPath: number;
+}
+
 const KAKAO_MOBILITY_BASE = "https://apis-navi.kakaomobility.com/v1/directions";
 const KAKAO_KEYWORD_BASE = "https://dapi.kakao.com/v2/local/search/keyword.json";
 const KAKAO_ADDRESS_BASE = "https://dapi.kakao.com/v2/local/search/address.json";
 const EX_BEST_FOOD_URL = "https://data.ex.co.kr/openapi/restinfo/restBestfoodList";
+const EX_REST_INFO_URL = "https://data.ex.co.kr/openapi/restinfo/hiwaySvarInfoList";
 
-const REST_AREA_QUERIES = ["\uD734\uAC8C\uC18C", "\uACE0\uC18D\uB3C4\uB85C \uD734\uAC8C\uC18C"];
+const REST_AREA_QUERIES = ["휴게소", "고속도로 휴게소"];
 const PRIORITIES: Array<"RECOMMEND" | "TIME" | "DISTANCE"> = ["RECOMMEND", "TIME", "DISTANCE"];
-
 const EXCLUDE_REST_AREA_KEYWORDS = [
-  "\uB3D9\uBB3C",
-  "\uC560\uACAC",
-  "\uCE74\uD398",
-  "\uBCF4\uD638\uC13C\uD130",
-  "\uC8FC\uCC28\uC7A5",
-  "\uC138\uCC28",
-  "\uB9C8\uD2B8",
-  "\uBAA8\UD154",
-  "\uD638\UD154",
-  "\uD3B8\uC758\uC810",
-  "\uC8F8\uC74C",
-  "\uC26C\uD130"
+  "동물",
+  "애견",
+  "카페",
+  "보호센터",
+  "주차장",
+  "세차",
+  "마트",
+  "호텔",
+  "모텔",
+  "편의점",
+  "놀이",
+  "체험",
+  "졸음쉼터",
+  "쉼터"
 ];
 
 const parseRequestBody = (body: unknown): GenerateRoutesRequest => {
@@ -109,20 +134,39 @@ const toCoordinates = (x: string | number, y: string | number): Coordinates => (
   lat: Number(y)
 });
 
-const normalizeName = (name: string): string =>
-  name
+const normalizeRestName = (name: string): string =>
+  String(name || "")
+    .toLowerCase()
     .replace(/\(.*?\)/g, "")
+    .replace(/[·\-.]/g, "")
     .replace(/\s+/g, "")
     .replace(/고속도로/g, "")
+    .replace(/휴게소/g, "")
+    .replace(/졸음쉼터/g, "")
+    .replace(/쉼터/g, "")
+    .replace(/(상행|하행|양방향|양평방향|서울방향|부산방향|목포방향|대전방향|인천방향|강릉방향|춘천방향|통영방향|순천방향|논산방향|대구방향|울산방향|광주방향)/g, "")
+    .replace(/[0-9]/g, "")
+    .trim();
+
+const normalizeRouteName = (name: string): string =>
+  String(name || "")
+    .toLowerCase()
+    .replace(/\(.*?\)/g, "")
+    .replace(/[·\-.]/g, "")
+    .replace(/\s+/g, "")
+    .replace(/고속국도/g, "")
+    .replace(/고속도로/g, "")
+    .replace(/자동차전용도로/g, "")
+    .replace(/국도/g, "")
     .replace(/선/g, "")
-    .trim()
-    .toLowerCase();
+    .replace(/[0-9]/g, "")
+    .trim();
 
 const looksLikeHighwayRestArea = (doc: any): boolean => {
   const name = String(doc?.place_name || "");
   const category = String(doc?.category_name || "");
   const text = `${name} ${category}`;
-  if (!text.includes("\uD734\uAC8C\uC18C")) return false;
+  if (!text.includes("휴게소")) return false;
   if (EXCLUDE_REST_AREA_KEYWORDS.some((keyword) => text.includes(keyword))) return false;
   return true;
 };
@@ -159,12 +203,12 @@ const extractPathFromRoute = (route: any): Coordinates[] => {
     const roads = Array.isArray(section?.roads) ? section.roads : [];
     roads.forEach((road: any) => {
       const vertexes = Array.isArray(road?.vertexes) ? road.vertexes : [];
-      for (let index = 0; index < vertexes.length - 1; index += 2) {
-        points.push({ lng: Number(vertexes[index]), lat: Number(vertexes[index + 1]) });
+      for (let i = 0; i < vertexes.length - 1; i += 2) {
+        points.push({ lng: Number(vertexes[i]), lat: Number(vertexes[i + 1]) });
       }
     });
   });
-  return samplePath(points, 220);
+  return samplePath(points, 280);
 };
 
 const distanceMeters = (a: Coordinates, b: Coordinates): number => {
@@ -180,62 +224,37 @@ const distanceMeters = (a: Coordinates, b: Coordinates): number => {
 
 const samplePointsByDistance = (path: Coordinates[], count: number): Coordinates[] => {
   if (path.length <= count) return path;
-  const segmentDistances: number[] = [0];
+  const cumulative: number[] = [0];
   for (let i = 1; i < path.length; i++) {
-    segmentDistances.push(segmentDistances[i - 1] + distanceMeters(path[i - 1], path[i]));
+    cumulative.push(cumulative[i - 1] + distanceMeters(path[i - 1], path[i]));
   }
-  const total = segmentDistances[segmentDistances.length - 1];
+  const total = cumulative[cumulative.length - 1];
   if (!total) return path.slice(0, count);
 
-  const points: Coordinates[] = [];
+  const result: Coordinates[] = [];
   for (let i = 0; i < count; i++) {
     const target = (total * i) / (count - 1);
-    let idx = segmentDistances.findIndex((d) => d >= target);
-    if (idx < 0) idx = segmentDistances.length - 1;
-    points.push(path[idx]);
+    let idx = cumulative.findIndex((d) => d >= target);
+    if (idx < 0) idx = cumulative.length - 1;
+    result.push(path[idx]);
   }
-  return points;
+  return result;
 };
 
-const extractRoadNamesFromRoute = (route: any): Set<string> => {
-  const sections = Array.isArray(route?.sections) ? route.sections : [];
-  const names = new Set<string>();
-  sections.forEach((section: any) => {
-    const roads = Array.isArray(section?.roads) ? section.roads : [];
-    roads.forEach((road: any) => {
-      const name = normalizeName(String(road?.name || ""));
-      if (name) names.add(name);
-    });
-  });
-  return names;
-};
-
-const buildFoodIndex = (rows: ExpresswayFoodRow[], roadNames?: Set<string>) => {
-  const byRestName = new Map<string, { foods: string[]; description: string }>();
-  const officialRestNames = new Set<string>();
-
-  rows.forEach((row) => {
-    const restNameRaw = String(row.stdRestNm || "").trim();
-    if (!restNameRaw) return;
-    const restName = normalizeName(restNameRaw);
-    if (!restName) return;
-
-    if (roadNames && roadNames.size > 0) {
-      const routeName = normalizeName(String(row.routeNm || ""));
-      if (routeName && !Array.from(roadNames).some((road) => road.includes(routeName) || routeName.includes(road))) {
-        return;
-      }
+const nearestPathPoint = (
+  point: Coordinates,
+  path: Coordinates[]
+): { index: number; distanceToPath: number } => {
+  let bestIdx = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < path.length; i++) {
+    const d = distanceMeters(point, path[i]);
+    if (d < bestDistance) {
+      bestDistance = d;
+      bestIdx = i;
     }
-
-    officialRestNames.add(restName);
-    const prev = byRestName.get(restName) || { foods: [], description: "" };
-    const foodName = String(row.foodNm || "").trim();
-    if (foodName && !prev.foods.includes(foodName)) prev.foods.push(foodName);
-    if (!prev.description && row.etc) prev.description = String(row.etc).trim();
-    byRestName.set(restName, prev);
-  });
-
-  return { byRestName, officialRestNames };
+  }
+  return { index: bestIdx, distanceToPath: bestDistance };
 };
 
 const fetchExpresswayFoods = async (apiKey: string): Promise<ExpresswayFoodRow[]> => {
@@ -245,30 +264,119 @@ const fetchExpresswayFoods = async (apiKey: string): Promise<ExpresswayFoodRow[]
   return data.list as ExpresswayFoodRow[];
 };
 
-const mapKakaoPlaceToStop = (
+const fetchExpresswayRestAreas = async (apiKey: string): Promise<ExpresswayRestRow[]> => {
+  const url = `${EX_REST_INFO_URL}?key=${encodeURIComponent(apiKey)}&type=json`;
+  const data: any = await fetchJson(url);
+  if (!Array.isArray(data?.list)) return [];
+  return data.list as ExpresswayRestRow[];
+};
+
+const buildIndexes = (foodRows: ExpresswayFoodRow[], restRows: ExpresswayRestRow[]) => {
+  const foodByRest = new Map<string, FoodMeta>();
+  foodRows.forEach((row) => {
+    const norm = normalizeRestName(String(row.stdRestNm || ""));
+    if (!norm) return;
+    const current = foodByRest.get(norm) || { foods: [], description: "" };
+    const foodName = String(row.foodNm || "").trim();
+    if (foodName && !current.foods.includes(foodName)) current.foods.push(foodName);
+    if (!current.description && row.etc) current.description = String(row.etc).trim();
+    foodByRest.set(norm, current);
+  });
+
+  const restMetaByName = new Map<string, OfficialRestMeta>();
+  restRows.forEach((row) => {
+    const clsName = String(row.svarGsstClssNm || "");
+    const clsCode = String(row.svarGsstClssCd || "");
+    const rawName = String(row.svarNm || "").trim();
+    if (!(clsName === "휴게소" || clsCode === "0")) return;
+    if (!rawName || rawName.includes("졸음쉼터")) return;
+    const norm = normalizeRestName(rawName);
+    if (!norm) return;
+    const routeNorm = normalizeRouteName(String(row.routeNm || ""));
+    const current = restMetaByName.get(norm) || { displayName: rawName, routeNames: new Set<string>() };
+    if (routeNorm) current.routeNames.add(routeNorm);
+    restMetaByName.set(norm, current);
+  });
+
+  return { foodByRest, restMetaByName };
+};
+
+const findOfficialRestKey = (candidateNorm: string, knownKeys: string[]): string | null => {
+  if (!candidateNorm) return null;
+  if (knownKeys.includes(candidateNorm)) return candidateNorm;
+
+  let best: string | null = null;
+  let bestGap = Number.POSITIVE_INFINITY;
+  for (const key of knownKeys) {
+    if (candidateNorm.includes(key) || key.includes(candidateNorm)) {
+      const gap = Math.abs(candidateNorm.length - key.length);
+      if (gap < bestGap) {
+        best = key;
+        bestGap = gap;
+      }
+    }
+  }
+  return best;
+};
+
+const sharesRouteHint = (routeHints: Set<string>, officialRoutes: Set<string>): boolean => {
+  if (routeHints.size === 0 || officialRoutes.size === 0) return true;
+  for (const hint of routeHints) {
+    for (const routeName of officialRoutes) {
+      if (hint.includes(routeName) || routeName.includes(hint)) return true;
+    }
+  }
+  return false;
+};
+
+const buildStop = (
   doc: any,
-  index: number,
-  foodIndex: Map<string, { foods: string[]; description: string }>
+  officialName: string,
+  officialKey: string,
+  indexSeed: number,
+  foodByRest: Map<string, FoodMeta>
 ): RouteStop => {
-  const name = String(doc.place_name || `Rest Area ${index + 1}`);
-  const norm = normalizeName(name);
-  const foodInfo = foodIndex.get(norm);
+  const menuInfo = foodByRest.get(officialKey);
+  const menuList = menuInfo?.foods.slice(0, 3) || [];
+  const description =
+    menuInfo?.description ||
+    (menuList.length > 0
+      ? `대표 메뉴: ${menuList.join(", ")}`
+      : String(doc.road_address_name || doc.address_name || "경로 인근 휴게소"));
 
   return {
-    stopId: String(doc.id || `${name}_${index}`),
+    stopId: String(doc.id || `${officialName}_${indexSeed}`),
     type: "highway_rest_area",
-    name,
+    name: officialName,
     location: { lat: Number(doc.y), lng: Number(doc.x) },
-    topItems: foodInfo?.foods?.slice(0, 3) || ["\uB300\uD45C \uBA54\uB274 \uC815\uBCF4 \uC5C5\uB370\uC774\uD2B8 \uC911"],
-    description: foodInfo?.description || String(doc.road_address_name || doc.address_name || "Route nearby rest area"),
+    topItems: menuList.length > 0 ? menuList : ["대표 메뉴 정보 준비 중"],
+    description,
     rating: 4.2,
-    imageUrl: `https://picsum.photos/400/300?restarea&sig=kakao_${index}`,
+    imageUrl: `https://picsum.photos/400/300?restarea&sig=${encodeURIComponent(officialKey)}`,
     searchLinks: {
-      naver: `https://map.naver.com/v5/search/${encodeURIComponent(name)}`,
-      google: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`,
-      kakao: `https://map.kakao.com/link/search/${encodeURIComponent(name)}`
+      naver: `https://map.naver.com/v5/search/${encodeURIComponent(officialName)}`,
+      google: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(officialName)}`,
+      kakao: `https://map.kakao.com/link/search/${encodeURIComponent(officialName)}`
     }
   };
+};
+
+const extractRouteHints = (route: any): Set<string> => {
+  const hints = new Set<string>();
+  const sections = Array.isArray(route?.sections) ? route.sections : [];
+
+  sections.forEach((section: any) => {
+    const roads = Array.isArray(section?.roads) ? section.roads : [];
+    roads.forEach((road: any) => {
+      const name = String(road?.name || "");
+      if (!name) return;
+      if (!name.includes("고속") && !name.includes("선")) return;
+      const normalized = normalizeRouteName(name);
+      if (normalized.length >= 2) hints.add(normalized);
+    });
+  });
+
+  return hints;
 };
 
 const fetchRouteCandidates = async (
@@ -305,40 +413,67 @@ const fetchRouteCandidates = async (
 
 const fetchRestAreasAlongPath = async (
   path: Coordinates[],
+  routeHints: Set<string>,
   restKey: string,
-  foodIndex: Map<string, { foods: string[]; description: string }>,
-  officialRestNames: Set<string>
+  foodByRest: Map<string, FoodMeta>,
+  restMetaByName: Map<string, OfficialRestMeta>
 ): Promise<RouteStop[]> => {
-  const points = samplePointsByDistance(path, 14);
-  const dedupe = new Map<string, RouteStop>();
+  const knownOfficialKeys = Array.from(restMetaByName.keys());
+  const pathPointCount = path.length > 220 ? 22 : 16;
+  const sampledPoints = samplePointsByDistance(path, pathPointCount);
+  const strict = new Map<string, CandidateStop>();
+  const relaxed = new Map<string, CandidateStop>();
 
-  for (const point of points) {
+  for (const point of sampledPoints) {
     for (const query of REST_AREA_QUERIES) {
       const url =
         `${KAKAO_KEYWORD_BASE}?query=${encodeURIComponent(query)}` +
-        `&x=${point.lng}&y=${point.lat}&radius=18000&size=15&sort=distance`;
+        `&x=${point.lng}&y=${point.lat}&radius=12000&size=15&sort=distance`;
 
       const data: any = await fetchJson(url, authHeaders(restKey));
       const docs = Array.isArray(data?.documents) ? data.documents : [];
 
       docs.forEach((doc: any) => {
         if (!looksLikeHighwayRestArea(doc)) return;
+        const candidateNorm = normalizeRestName(String(doc.place_name || ""));
+        const officialKey = findOfficialRestKey(candidateNorm, knownOfficialKeys);
+        if (!officialKey) return;
 
-        const norm = normalizeName(String(doc.place_name || ""));
-        if (officialRestNames.size > 0) {
-          const isOfficial = Array.from(officialRestNames).some(
-            (official) => norm.includes(official) || official.includes(norm)
-          );
-          if (!isOfficial) return;
+        const officialMeta = restMetaByName.get(officialKey);
+        if (!officialMeta) return;
+
+        const pointInfo = nearestPathPoint({ lat: Number(doc.y), lng: Number(doc.x) }, path);
+        const routeMatch = sharesRouteHint(routeHints, officialMeta.routeNames);
+        const stop = buildStop(doc, officialMeta.displayName, officialKey, strict.size + relaxed.size, foodByRest);
+
+        const strictPass = routeMatch && pointInfo.distanceToPath <= 3500;
+        const relaxedPass = pointInfo.distanceToPath <= 8000;
+        if (!relaxedPass) return;
+
+        const candidate: CandidateStop = {
+          stop,
+          order: pointInfo.index,
+          distanceToPath: pointInfo.distanceToPath
+        };
+
+        const targetMap = strictPass ? strict : relaxed;
+        const prev = targetMap.get(officialKey);
+        if (
+          !prev ||
+          candidate.distanceToPath < prev.distanceToPath ||
+          (candidate.distanceToPath === prev.distanceToPath && candidate.order < prev.order)
+        ) {
+          targetMap.set(officialKey, candidate);
         }
-
-        const key = String(doc.id || doc.place_name || `${doc.x}_${doc.y}`);
-        if (!dedupe.has(key)) dedupe.set(key, mapKakaoPlaceToStop(doc, dedupe.size, foodIndex));
       });
     }
   }
 
-  return Array.from(dedupe.values()).slice(0, 12);
+  const chosen = strict.size >= 2 ? strict : new Map<string, CandidateStop>([...strict, ...relaxed]);
+  return Array.from(chosen.values())
+    .sort((a, b) => a.order - b.order)
+    .slice(0, 12)
+    .map((entry) => entry.stop);
 };
 
 const toRouteSummary = (
@@ -373,22 +508,24 @@ export default async function handler(req: any, res: any) {
   try {
     const origin = body.startCoords || (await resolveCoordinates(start, kakaoRestKey));
     const target = body.destCoords || (await resolveCoordinates(destination, kakaoRestKey));
-
     const routeCandidates = await fetchRouteCandidates(origin, target, kakaoRestKey);
     if (routeCandidates.length === 0) return res.status(200).json({ routes: [] });
 
     const exApiKey =
       (process.env.EXPRESSWAY_API_KEY || process.env.KOREA_EXPRESSWAY_API_KEY || "test").trim();
-    const exRows = await fetchExpresswayFoods(exApiKey);
+    const [foodRows, restRows] = await Promise.all([
+      fetchExpresswayFoods(exApiKey),
+      fetchExpresswayRestAreas(exApiKey)
+    ]);
+    const { foodByRest, restMetaByName } = buildIndexes(foodRows, restRows);
 
     const routes: RouteOption[] = [];
     for (let i = 0; i < routeCandidates.length; i++) {
       const { route: rawRoute, priority } = routeCandidates[i];
       const summary = rawRoute?.summary || {};
       const path = extractPathFromRoute(rawRoute);
-      const roadNames = extractRoadNamesFromRoute(rawRoute);
-      const { byRestName, officialRestNames } = buildFoodIndex(exRows, roadNames);
-      const stops = await fetchRestAreasAlongPath(path, kakaoRestKey, byRestName, officialRestNames);
+      const routeHints = extractRouteHints(rawRoute);
+      const stops = await fetchRestAreasAlongPath(path, routeHints, kakaoRestKey, foodByRest, restMetaByName);
       const distanceKm = Math.round((Number(summary.distance || 0) / 1000) * 10) / 10;
       const durationMin = Math.round(Number(summary.duration || 0) / 60);
 
@@ -401,9 +538,22 @@ export default async function handler(req: any, res: any) {
         path,
         stops,
         sources: [
-          { title: "Kakao Mobility Directions API", uri: "https://developers.kakaomobility.com/docs/navi-api/directions/" },
-          { title: "Kakao Local Search API", uri: "https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword" },
-          { title: "Korea Expressway Corporation Rest Area API", uri: "https://data.ex.co.kr/openapi/" }
+          {
+            title: "Kakao Mobility Directions API",
+            uri: "https://developers.kakaomobility.com/docs/navi-api/directions/"
+          },
+          {
+            title: "Kakao Local Search API",
+            uri: "https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword"
+          },
+          {
+            title: "한국도로공사 휴게소 정보 API (0317)",
+            uri: "https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0317&serviceType=OPENAPI"
+          },
+          {
+            title: "한국도로공사 대표메뉴 API (0502)",
+            uri: "https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0502&serviceType=OPENAPI"
+          }
         ]
       });
     }
