@@ -319,6 +319,39 @@ const findOfficialRestKey = (candidateNorm: string, knownKeys: string[]): string
   return best;
 };
 
+const findFoodMeta = (
+  officialKey: string,
+  officialName: string,
+  placeName: string,
+  foodByRest: Map<string, FoodMeta>
+): FoodMeta | undefined => {
+  const keys = [
+    officialKey,
+    normalizeRestName(officialName),
+    normalizeRestName(placeName)
+  ].filter(Boolean);
+
+  for (const key of keys) {
+    const exact = foodByRest.get(key);
+    if (exact) return exact;
+  }
+
+  let best: FoodMeta | undefined;
+  let bestGap = Number.POSITIVE_INFINITY;
+  for (const [k, v] of foodByRest.entries()) {
+    for (const target of keys) {
+      if (k.includes(target) || target.includes(k)) {
+        const gap = Math.abs(k.length - target.length);
+        if (gap < bestGap) {
+          best = v;
+          bestGap = gap;
+        }
+      }
+    }
+  }
+  return best;
+};
+
 const sharesRouteHint = (routeHints: Set<string>, officialRoutes: Set<string>): boolean => {
   if (routeHints.size === 0 || officialRoutes.size === 0) return true;
   for (const hint of routeHints) {
@@ -336,7 +369,12 @@ const buildStop = (
   indexSeed: number,
   foodByRest: Map<string, FoodMeta>
 ): RouteStop => {
-  const menuInfo = foodByRest.get(officialKey);
+  const menuInfo = findFoodMeta(
+    officialKey,
+    officialName,
+    String(doc.place_name || ""),
+    foodByRest
+  );
   const menuList = menuInfo?.foods.slice(0, 3) || [];
   const description =
     menuInfo?.description ||
@@ -472,7 +510,6 @@ const fetchRestAreasAlongPath = async (
   const chosen = strict.size >= 2 ? strict : new Map<string, CandidateStop>([...strict, ...relaxed]);
   return Array.from(chosen.values())
     .sort((a, b) => a.order - b.order)
-    .slice(0, 12)
     .map((entry) => entry.stop);
 };
 

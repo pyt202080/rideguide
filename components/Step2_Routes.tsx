@@ -14,6 +14,7 @@ const LOADING_MESSAGES = [
   "이동 거리와 예상 소요 시간을 정리하고 있습니다",
   "경로 데이터를 화면에 맞게 최적화하고 있습니다"
 ];
+const STOPS_PAGE_SIZE = 10;
 
 const StopRow: React.FC<{ stop: Stop; index: number }> = ({ stop, index }) => (
   <div className="group relative flex items-start gap-4 py-8 border-b border-black/[0.03] hover:bg-neutral-50/80 transition-all px-6 -mx-6 rounded-2xl">
@@ -76,6 +77,7 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
   const [msgIndex, setMsgIndex] = useState(0);
   const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [visibleStopsCount, setVisibleStopsCount] = useState(STOPS_PAGE_SIZE);
 
   useEffect(() => {
     let msgInterval: ReturnType<typeof setInterval>;
@@ -105,7 +107,13 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
     fetchRoutes();
   }, [searchData]);
 
+  useEffect(() => {
+    setVisibleStopsCount(STOPS_PAGE_SIZE);
+  }, [activeRouteId]);
+
   const activeRoute = routes.find(r => r.routeId === activeRouteId);
+  const displayedStops = (activeRoute?.stops || []).slice(0, visibleStopsCount);
+  const hasMoreStops = (activeRoute?.stops.length || 0) > visibleStopsCount;
   const formatName = (name: string) => name.split('(')[0].split(',')[0].trim();
 
   if (loading) {
@@ -267,7 +275,7 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
             </div>
 
             <div className="space-y-0 relative z-10">
-              {activeRoute?.stops.map((stop, idx) => (
+              {displayedStops.map((stop, idx) => (
                 <StopRow 
                   key={stop.stopId} 
                   stop={stop} 
@@ -275,6 +283,17 @@ const Step2_Routes: React.FC<Step2Props> = ({ searchData, onBack }) => {
                 />
               ))}
             </div>
+
+            {hasMoreStops && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => setVisibleStopsCount(prev => prev + STOPS_PAGE_SIZE)}
+                  className="px-5 py-3 rounded-xl bg-white border border-neutral-200 text-[13px] font-black text-neutral-700 hover:bg-neutral-50 transition-all"
+                >
+                  휴게소 10개 더보기
+                </button>
+              </div>
+            )}
 
             <div className="flex items-center gap-3 mt-10 relative z-10">
               <div className="w-9 h-9 rounded-full bg-rose-500 border-4 border-white shadow-lg flex items-center justify-center text-white flex-none">
